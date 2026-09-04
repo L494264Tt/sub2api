@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
@@ -25,6 +26,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 )
 
 // UserUpdate is the builder for updating User entities.
@@ -443,6 +445,95 @@ func (_u *UserUpdate) SetNillableRpmLimit(v *int) *UserUpdate {
 // AddRpmLimit adds value to the "rpm_limit" field.
 func (_u *UserUpdate) AddRpmLimit(v int) *UserUpdate {
 	_u.mutation.AddRpmLimit(v)
+	return _u
+}
+
+// SetTokenLimit1d sets the "token_limit_1d" field.
+func (_u *UserUpdate) SetTokenLimit1d(v int64) *UserUpdate {
+	_u.mutation.ResetTokenLimit1d()
+	_u.mutation.SetTokenLimit1d(v)
+	return _u
+}
+
+// SetNillableTokenLimit1d sets the "token_limit_1d" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableTokenLimit1d(v *int64) *UserUpdate {
+	if v != nil {
+		_u.SetTokenLimit1d(*v)
+	}
+	return _u
+}
+
+// AddTokenLimit1d adds value to the "token_limit_1d" field.
+func (_u *UserUpdate) AddTokenLimit1d(v int64) *UserUpdate {
+	_u.mutation.AddTokenLimit1d(v)
+	return _u
+}
+
+// SetTokenLimit7d sets the "token_limit_7d" field.
+func (_u *UserUpdate) SetTokenLimit7d(v int64) *UserUpdate {
+	_u.mutation.ResetTokenLimit7d()
+	_u.mutation.SetTokenLimit7d(v)
+	return _u
+}
+
+// SetNillableTokenLimit7d sets the "token_limit_7d" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableTokenLimit7d(v *int64) *UserUpdate {
+	if v != nil {
+		_u.SetTokenLimit7d(*v)
+	}
+	return _u
+}
+
+// AddTokenLimit7d adds value to the "token_limit_7d" field.
+func (_u *UserUpdate) AddTokenLimit7d(v int64) *UserUpdate {
+	_u.mutation.AddTokenLimit7d(v)
+	return _u
+}
+
+// SetTokenLimit30d sets the "token_limit_30d" field.
+func (_u *UserUpdate) SetTokenLimit30d(v int64) *UserUpdate {
+	_u.mutation.ResetTokenLimit30d()
+	_u.mutation.SetTokenLimit30d(v)
+	return _u
+}
+
+// SetNillableTokenLimit30d sets the "token_limit_30d" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableTokenLimit30d(v *int64) *UserUpdate {
+	if v != nil {
+		_u.SetTokenLimit30d(*v)
+	}
+	return _u
+}
+
+// AddTokenLimit30d adds value to the "token_limit_30d" field.
+func (_u *UserUpdate) AddTokenLimit30d(v int64) *UserUpdate {
+	_u.mutation.AddTokenLimit30d(v)
+	return _u
+}
+
+// SetTokenQuotaStartedAt sets the "token_quota_started_at" field.
+func (_u *UserUpdate) SetTokenQuotaStartedAt(v time.Time) *UserUpdate {
+	_u.mutation.SetTokenQuotaStartedAt(v)
+	return _u
+}
+
+// SetNillableTokenQuotaStartedAt sets the "token_quota_started_at" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableTokenQuotaStartedAt(v *time.Time) *UserUpdate {
+	if v != nil {
+		_u.SetTokenQuotaStartedAt(*v)
+	}
+	return _u
+}
+
+// SetModelRestrictions sets the "model_restrictions" field.
+func (_u *UserUpdate) SetModelRestrictions(v []domain.UserModelRestriction) *UserUpdate {
+	_u.mutation.SetModelRestrictions(v)
+	return _u
+}
+
+// AppendModelRestrictions appends value to the "model_restrictions" field.
+func (_u *UserUpdate) AppendModelRestrictions(v []domain.UserModelRestriction) *UserUpdate {
+	_u.mutation.AppendModelRestrictions(v)
 	return _u
 }
 
@@ -1115,6 +1206,35 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedRpmLimit(); ok {
 		_spec.AddField(user.FieldRpmLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.TokenLimit1d(); ok {
+		_spec.SetField(user.FieldTokenLimit1d, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTokenLimit1d(); ok {
+		_spec.AddField(user.FieldTokenLimit1d, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.TokenLimit7d(); ok {
+		_spec.SetField(user.FieldTokenLimit7d, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTokenLimit7d(); ok {
+		_spec.AddField(user.FieldTokenLimit7d, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.TokenLimit30d(); ok {
+		_spec.SetField(user.FieldTokenLimit30d, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTokenLimit30d(); ok {
+		_spec.AddField(user.FieldTokenLimit30d, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.TokenQuotaStartedAt(); ok {
+		_spec.SetField(user.FieldTokenQuotaStartedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.ModelRestrictions(); ok {
+		_spec.SetField(user.FieldModelRestrictions, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedModelRestrictions(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, user.FieldModelRestrictions, value)
+		})
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -2139,6 +2259,95 @@ func (_u *UserUpdateOne) AddRpmLimit(v int) *UserUpdateOne {
 	return _u
 }
 
+// SetTokenLimit1d sets the "token_limit_1d" field.
+func (_u *UserUpdateOne) SetTokenLimit1d(v int64) *UserUpdateOne {
+	_u.mutation.ResetTokenLimit1d()
+	_u.mutation.SetTokenLimit1d(v)
+	return _u
+}
+
+// SetNillableTokenLimit1d sets the "token_limit_1d" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableTokenLimit1d(v *int64) *UserUpdateOne {
+	if v != nil {
+		_u.SetTokenLimit1d(*v)
+	}
+	return _u
+}
+
+// AddTokenLimit1d adds value to the "token_limit_1d" field.
+func (_u *UserUpdateOne) AddTokenLimit1d(v int64) *UserUpdateOne {
+	_u.mutation.AddTokenLimit1d(v)
+	return _u
+}
+
+// SetTokenLimit7d sets the "token_limit_7d" field.
+func (_u *UserUpdateOne) SetTokenLimit7d(v int64) *UserUpdateOne {
+	_u.mutation.ResetTokenLimit7d()
+	_u.mutation.SetTokenLimit7d(v)
+	return _u
+}
+
+// SetNillableTokenLimit7d sets the "token_limit_7d" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableTokenLimit7d(v *int64) *UserUpdateOne {
+	if v != nil {
+		_u.SetTokenLimit7d(*v)
+	}
+	return _u
+}
+
+// AddTokenLimit7d adds value to the "token_limit_7d" field.
+func (_u *UserUpdateOne) AddTokenLimit7d(v int64) *UserUpdateOne {
+	_u.mutation.AddTokenLimit7d(v)
+	return _u
+}
+
+// SetTokenLimit30d sets the "token_limit_30d" field.
+func (_u *UserUpdateOne) SetTokenLimit30d(v int64) *UserUpdateOne {
+	_u.mutation.ResetTokenLimit30d()
+	_u.mutation.SetTokenLimit30d(v)
+	return _u
+}
+
+// SetNillableTokenLimit30d sets the "token_limit_30d" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableTokenLimit30d(v *int64) *UserUpdateOne {
+	if v != nil {
+		_u.SetTokenLimit30d(*v)
+	}
+	return _u
+}
+
+// AddTokenLimit30d adds value to the "token_limit_30d" field.
+func (_u *UserUpdateOne) AddTokenLimit30d(v int64) *UserUpdateOne {
+	_u.mutation.AddTokenLimit30d(v)
+	return _u
+}
+
+// SetTokenQuotaStartedAt sets the "token_quota_started_at" field.
+func (_u *UserUpdateOne) SetTokenQuotaStartedAt(v time.Time) *UserUpdateOne {
+	_u.mutation.SetTokenQuotaStartedAt(v)
+	return _u
+}
+
+// SetNillableTokenQuotaStartedAt sets the "token_quota_started_at" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableTokenQuotaStartedAt(v *time.Time) *UserUpdateOne {
+	if v != nil {
+		_u.SetTokenQuotaStartedAt(*v)
+	}
+	return _u
+}
+
+// SetModelRestrictions sets the "model_restrictions" field.
+func (_u *UserUpdateOne) SetModelRestrictions(v []domain.UserModelRestriction) *UserUpdateOne {
+	_u.mutation.SetModelRestrictions(v)
+	return _u
+}
+
+// AppendModelRestrictions appends value to the "model_restrictions" field.
+func (_u *UserUpdateOne) AppendModelRestrictions(v []domain.UserModelRestriction) *UserUpdateOne {
+	_u.mutation.AppendModelRestrictions(v)
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *UserUpdateOne) AddAPIKeyIDs(ids ...int64) *UserUpdateOne {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -2838,6 +3047,35 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.AddedRpmLimit(); ok {
 		_spec.AddField(user.FieldRpmLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.TokenLimit1d(); ok {
+		_spec.SetField(user.FieldTokenLimit1d, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTokenLimit1d(); ok {
+		_spec.AddField(user.FieldTokenLimit1d, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.TokenLimit7d(); ok {
+		_spec.SetField(user.FieldTokenLimit7d, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTokenLimit7d(); ok {
+		_spec.AddField(user.FieldTokenLimit7d, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.TokenLimit30d(); ok {
+		_spec.SetField(user.FieldTokenLimit30d, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTokenLimit30d(); ok {
+		_spec.AddField(user.FieldTokenLimit30d, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.TokenQuotaStartedAt(); ok {
+		_spec.SetField(user.FieldTokenQuotaStartedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.ModelRestrictions(); ok {
+		_spec.SetField(user.FieldModelRestrictions, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedModelRestrictions(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, user.FieldModelRestrictions, value)
+		})
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{

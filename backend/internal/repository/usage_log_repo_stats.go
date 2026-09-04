@@ -16,6 +16,34 @@ import (
 	"github.com/lib/pq"
 )
 
+// GetUserTokenUsage returns the current daily and rolling 7/30-day token totals.
+// The daily window starts at 07:00 in the configured timezone. Usage before
+// quotaStartedAt is excluded from every window.
+func (r *usageLogRepository) GetUserTokenUsage(ctx context.Context, userID int64, now, quotaStartedAt time.Time) (*service.UserTokenUsage, error) {
+	if quotaStartedAt.IsZero() {
+		quotaStartedAt = now.Add(-30 * 24 * time.Hour)
+	}
+	quotaDayStartedAt := timezone.StartOfQuotaDay(now)
+	query := `
+		SELECT
+			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens)
+				FILTER (WHERE created_at >= GREATEST($4::timestamptz, $3::timestamptz)), 0),
+			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens)
+				FILTER (WHERE created_at >= GREATEST($2::timestamptz - INTERVAL '7 days', $3::timestamptz)), 0),
+			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0)
+		FROM usage_logs
+		WHERE user_id = $1
+			AND LOWER(REGEXP_REPLACE(COALESCE(NULLIF(BTRIM(requested_model), ''), model), '^.*/', '')) LIKE 'gpt-%'
+			AND created_at >= GREATEST($2::timestamptz - INTERVAL '30 days', $3::timestamptz)
+			AND created_at <= $2::timestamptz
+	`
+	usage := &service.UserTokenUsage{}
+	if err := scanSingleRow(ctx, r.sql, query, []any{userID, now, quotaStartedAt, quotaDayStartedAt}, &usage.Usage1d, &usage.Usage7d, &usage.Usage30d); err != nil {
+		return nil, err
+	}
+	return usage, nil
+}
+
 // GetUserStatsAggregated returns aggregated usage statistics for a user using database-level aggregation
 func (r *usageLogRepository) GetUserStatsAggregated(ctx context.Context, userID int64, startTime, endTime time.Time) (*usagestats.UsageStats, error) {
 	query := `

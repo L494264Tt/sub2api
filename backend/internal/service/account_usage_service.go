@@ -78,6 +78,13 @@ type UsageLogRepository interface {
 	GetAccountStatsAggregated(ctx context.Context, accountID int64, startTime, endTime time.Time) (*usagestats.UsageStats, error)
 	GetModelStatsAggregated(ctx context.Context, modelName string, startTime, endTime time.Time) (*usagestats.UsageStats, error)
 	GetDailyStatsAggregated(ctx context.Context, userID int64, startTime, endTime time.Time) ([]map[string]any, error)
+	GetUserTokenUsage(ctx context.Context, userID int64, now, quotaStartedAt time.Time) (*UserTokenUsage, error)
+}
+
+type UserTokenUsage struct {
+	Usage1d  int64
+	Usage7d  int64
+	Usage30d int64
 }
 
 type accountWindowStatsBatchReader interface {

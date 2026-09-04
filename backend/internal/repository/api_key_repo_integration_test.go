@@ -125,6 +125,42 @@ func (s *APIKeyRepoSuite) TestGetByKeyForAuth_PreservesMessagesDispatchModelConf
 	s.Require().Equal("gpt-5.4-nano", got.Group.MessagesDispatchModelConfig.ExactModelMappings["claude-sonnet-4.5"])
 }
 
+func (s *APIKeyRepoSuite) TestGetByKeyForAuth_PreservesUserRequestPolicies() {
+	userEntity := s.mustCreateUser("getbykey-auth-user-policy@test.com")
+	quotaStartedAt := time.Date(2026, 7, 23, 5, 0, 0, 0, time.UTC)
+	_, err := s.client.User.UpdateOneID(userEntity.ID).
+		SetTokenLimit1d(80_000_000).
+		SetTokenLimit7d(200_000_000).
+		SetTokenLimit30d(500_000_000).
+		SetTokenQuotaStartedAt(quotaStartedAt).
+		SetModelRestrictions([]service.UserModelRestriction{{
+			ModelPattern:     "gpt-5.6-sol",
+			ReasoningEfforts: []string{"xhigh"},
+		}}).
+		Save(s.ctx)
+	s.Require().NoError(err)
+
+	key := &service.APIKey{
+		UserID: userEntity.ID,
+		Key:    "sk-getbykey-auth-user-policy",
+		Name:   "User Policy Key",
+		Status: service.StatusActive,
+	}
+	s.Require().NoError(s.repo.Create(s.ctx, key))
+
+	got, err := s.repo.GetByKeyForAuth(s.ctx, key.Key)
+	s.Require().NoError(err)
+	s.Require().NotNil(got.User)
+	s.Require().EqualValues(80_000_000, got.User.TokenLimit1d)
+	s.Require().EqualValues(200_000_000, got.User.TokenLimit7d)
+	s.Require().EqualValues(500_000_000, got.User.TokenLimit30d)
+	s.Require().Equal(quotaStartedAt, got.User.TokenQuotaStartedAt)
+	s.Require().Equal([]service.UserModelRestriction{{
+		ModelPattern:     "gpt-5.6-sol",
+		ReasoningEfforts: []string{"xhigh"},
+	}}, got.User.ModelRestrictions)
+}
+
 // --- Update ---
 
 func (s *APIKeyRepoSuite) TestUpdate() {

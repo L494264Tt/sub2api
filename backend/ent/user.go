@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/Wei-Shaw/sub2api/ent/user"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 )
 
 // User is the model entity for the User schema.
@@ -67,6 +69,16 @@ type User struct {
 	TotalRecharged float64 `json:"total_recharged,omitempty"`
 	// RpmLimit holds the value of the "rpm_limit" field.
 	RpmLimit int `json:"rpm_limit,omitempty"`
+	// TokenLimit1d holds the value of the "token_limit_1d" field.
+	TokenLimit1d int64 `json:"token_limit_1d,omitempty"`
+	// TokenLimit7d holds the value of the "token_limit_7d" field.
+	TokenLimit7d int64 `json:"token_limit_7d,omitempty"`
+	// TokenLimit30d holds the value of the "token_limit_30d" field.
+	TokenLimit30d int64 `json:"token_limit_30d,omitempty"`
+	// TokenQuotaStartedAt holds the value of the "token_quota_started_at" field.
+	TokenQuotaStartedAt time.Time `json:"token_quota_started_at,omitempty"`
+	// ModelRestrictions holds the value of the "model_restrictions" field.
+	ModelRestrictions []domain.UserModelRestriction `json:"model_restrictions,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the UserQuery when eager-loading is set.
 	Edges        UserEdges `json:"edges"`
@@ -239,15 +251,17 @@ func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case user.FieldModelRestrictions:
+			values[i] = new([]byte)
 		case user.FieldTotpEnabled, user.FieldRestrictPublicGroups, user.FieldBalanceNotifyEnabled:
 			values[i] = new(sql.NullBool)
 		case user.FieldBalance, user.FieldFrozenBalance, user.FieldBalanceNotifyThreshold, user.FieldTotalRecharged:
 			values[i] = new(sql.NullFloat64)
-		case user.FieldID, user.FieldConcurrency, user.FieldRpmLimit:
+		case user.FieldID, user.FieldConcurrency, user.FieldRpmLimit, user.FieldTokenLimit1d, user.FieldTokenLimit7d, user.FieldTokenLimit30d:
 			values[i] = new(sql.NullInt64)
 		case user.FieldEmail, user.FieldPasswordHash, user.FieldRole, user.FieldStatus, user.FieldUsername, user.FieldNotes, user.FieldTotpSecretEncrypted, user.FieldSignupSource, user.FieldBalanceNotifyThresholdType, user.FieldBalanceNotifyExtraEmails:
 			values[i] = new(sql.NullString)
-		case user.FieldCreatedAt, user.FieldUpdatedAt, user.FieldDeletedAt, user.FieldTotpEnabledAt, user.FieldLastLoginAt, user.FieldLastActiveAt:
+		case user.FieldCreatedAt, user.FieldUpdatedAt, user.FieldDeletedAt, user.FieldTotpEnabledAt, user.FieldLastLoginAt, user.FieldLastActiveAt, user.FieldTokenQuotaStartedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -425,6 +439,38 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field rpm_limit", values[i])
 			} else if value.Valid {
 				_m.RpmLimit = int(value.Int64)
+			}
+		case user.FieldTokenLimit1d:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field token_limit_1d", values[i])
+			} else if value.Valid {
+				_m.TokenLimit1d = value.Int64
+			}
+		case user.FieldTokenLimit7d:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field token_limit_7d", values[i])
+			} else if value.Valid {
+				_m.TokenLimit7d = value.Int64
+			}
+		case user.FieldTokenLimit30d:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field token_limit_30d", values[i])
+			} else if value.Valid {
+				_m.TokenLimit30d = value.Int64
+			}
+		case user.FieldTokenQuotaStartedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field token_quota_started_at", values[i])
+			} else if value.Valid {
+				_m.TokenQuotaStartedAt = value.Time
+			}
+		case user.FieldModelRestrictions:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field model_restrictions", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.ModelRestrictions); err != nil {
+					return fmt.Errorf("unmarshal field model_restrictions: %w", err)
+				}
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -618,6 +664,21 @@ func (_m *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("rpm_limit=")
 	builder.WriteString(fmt.Sprintf("%v", _m.RpmLimit))
+	builder.WriteString(", ")
+	builder.WriteString("token_limit_1d=")
+	builder.WriteString(fmt.Sprintf("%v", _m.TokenLimit1d))
+	builder.WriteString(", ")
+	builder.WriteString("token_limit_7d=")
+	builder.WriteString(fmt.Sprintf("%v", _m.TokenLimit7d))
+	builder.WriteString(", ")
+	builder.WriteString("token_limit_30d=")
+	builder.WriteString(fmt.Sprintf("%v", _m.TokenLimit30d))
+	builder.WriteString(", ")
+	builder.WriteString("token_quota_started_at=")
+	builder.WriteString(_m.TokenQuotaStartedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	builder.WriteString("model_restrictions=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ModelRestrictions))
 	builder.WriteByte(')')
 	return builder.String()
 }

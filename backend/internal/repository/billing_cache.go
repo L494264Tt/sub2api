@@ -24,10 +24,82 @@ const (
 	rateLimitCacheTTL         = 7 * 24 * time.Hour // 7 days matches the longest window
 
 	// Rate limit window durations — must match service.RateLimitWindow* constants.
-	rateLimitWindow5h = 5 * time.Hour
-	rateLimitWindow1d = 24 * time.Hour
-	rateLimitWindow7d = 7 * 24 * time.Hour
+	rateLimitWindow5h       = 5 * time.Hour
+	rateLimitWindow1d       = 24 * time.Hour
+	rateLimitWindow7d       = 7 * 24 * time.Hour
+	userTokenUsageKeyPrefix = "billing:user_token_usage:"
 )
+
+func userTokenUsageCacheKey(userID int64, quotaStartedAt, quotaDayStartedAt time.Time) string {
+	return userTokenUsageKeyPrefix + strconv.FormatInt(userID, 10) + ":" +
+		strconv.FormatInt(quotaStartedAt.UnixNano(), 10) + ":" +
+		strconv.FormatInt(quotaDayStartedAt.UnixNano(), 10)
+}
+
+func (c *billingCache) GetUserTokenUsageCache(ctx context.Context, userID int64, quotaStartedAt, quotaDayStartedAt time.Time) (*service.UserTokenUsage, bool, error) {
+	values, err := c.rdb.HGetAll(ctx, userTokenUsageCacheKey(userID, quotaStartedAt, quotaDayStartedAt)).Result()
+	if err != nil {
+		return nil, false, err
+	}
+	if len(values) == 0 {
+		return nil, false, nil
+	}
+	parse := func(field string) (int64, error) {
+		value, ok := values[field]
+		if !ok {
+			return 0, fmt.Errorf("user token usage cache missing field %q", field)
+		}
+		parsed, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("parse user token usage cache field %q: %w", field, err)
+		}
+		return parsed, nil
+	}
+	usage1d, err := parse("usage_1d")
+	if err != nil {
+		return nil, false, err
+	}
+	usage7d, err := parse("usage_7d")
+	if err != nil {
+		return nil, false, err
+	}
+	usage30d, err := parse("usage_30d")
+	if err != nil {
+		return nil, false, err
+	}
+	return &service.UserTokenUsage{
+		Usage1d:  usage1d,
+		Usage7d:  usage7d,
+		Usage30d: usage30d,
+	}, true, nil
+}
+
+func (c *billingCache) SetUserTokenUsageCache(ctx context.Context, userID int64, quotaStartedAt, quotaDayStartedAt time.Time, usage *service.UserTokenUsage, ttl time.Duration) error {
+	if usage == nil {
+		return nil
+	}
+	key := userTokenUsageCacheKey(userID, quotaStartedAt, quotaDayStartedAt)
+	pipe := c.rdb.TxPipeline()
+	pipe.HSet(ctx, key, "usage_1d", usage.Usage1d, "usage_7d", usage.Usage7d, "usage_30d", usage.Usage30d)
+	pipe.Expire(ctx, key, ttl)
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
+const incrementUserTokenUsageScript = `
+if redis.call("EXISTS", KEYS[1]) == 0 then
+    return 0
+end
+redis.call("HINCRBY", KEYS[1], "usage_1d", ARGV[1])
+redis.call("HINCRBY", KEYS[1], "usage_7d", ARGV[1])
+redis.call("HINCRBY", KEYS[1], "usage_30d", ARGV[1])
+return 1
+`
+
+func (c *billingCache) IncrementUserTokenUsageCache(ctx context.Context, userID int64, quotaStartedAt, quotaDayStartedAt time.Time, tokens int64) error {
+	_, err := c.rdb.Eval(ctx, incrementUserTokenUsageScript, []string{userTokenUsageCacheKey(userID, quotaStartedAt, quotaDayStartedAt)}, tokens).Result()
+	return err
+}
 
 // jitteredTTL 返回带随机抖动的 TTL，防止缓存雪崩
 func jitteredTTL() time.Duration {

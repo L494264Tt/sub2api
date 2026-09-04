@@ -77,6 +77,10 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 	}
 	reqModel := modelResult.String()
 	bindRequestedReasoningEffort(c, body, reqModel)
+	if err := service.CheckUserModelAccess(apiKey.User, reqModel, body); err != nil {
+		h.responsesErrorResponse(c, http.StatusForbidden, "permission_error", "This model or reasoning effort is not allowed for this user")
+		return
+	}
 	ensureCompositeTargetPlatform(c, apiKey, reqModel)
 	if !compositeTargetPlatformResolved(c, apiKey, reqModel) {
 		h.responsesErrorResponse(c, http.StatusBadRequest, "invalid_request_error", "Model is not supported by composite groups")
