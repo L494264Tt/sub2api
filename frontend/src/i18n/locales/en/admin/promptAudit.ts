@@ -3,7 +3,7 @@ export default {
     title: 'Prompt Audit',
     description: 'Review user input asynchronously or block it synchronously through OpenAI-compatible Qwen3Guard nodes. Full prompts are stored with events for admin review.',
     configVersion: 'Config version v{version}',
-    tabs: { config: 'Configuration', events: 'Events' },
+    tabs: { config: 'Configuration', events: 'Events', conversations: 'Conversation archive', reviewRuns: 'Review runs' },
     actions: { refresh: 'Refresh runtime', retry: 'Retry', Allow: 'Allow', Warn: 'Warn', Block: 'Block' },
     common: { actions: 'Actions', never: 'Never' },
     mode: { off: 'Off', async_audit: 'Async audit only', blocking: 'Synchronous audit and block' },
@@ -55,6 +55,18 @@ export default {
       searchGroups: 'Search groups', noGroups: 'No matching groups', missingGroups: 'Configured IDs for groups that no longer exist', selectedCount: '{count} groups selected',
       scanners: 'Qwen3Guard input-risk categories', workerCount: 'Worker count', queueCapacity: 'Persistent queue capacity', strategy: 'Node strategy', strategyHint: 'Try nodes in configuration order and fail over when allowed.',
     },
+    conversations: {
+      title: 'Conversation archive', description: 'Inspect recorded user conversations, model responses, and per-turn review state.', configTitle: 'Conversation recording and periodic review',
+      configDescription: 'Record successful conversations for the selected groups and review them periodically with the active Guard pool.', recording: 'Record conversations and model responses', periodicReview: 'Enable periodic conversation review',
+      privacyHint: 'Archived content is sensitive. Recording is off by default, and deleting a session also deletes all of its turns.', interval: 'Review interval (minutes)', batchSize: 'Turns per batch', retention: 'Retention days',
+      requestLimit: 'Request character limit', responseLimit: 'Response character limit', keyword: 'Search conversation text', conversationId: 'External conversation ID', allStatuses: 'All review states', allDecisions: 'All review decisions',
+      lastTurn: 'Last turn', reviewState: 'Review state', empty: 'No matching archived conversations.', sessions: 'sessions', detailTitle: 'Conversation details', request: 'User conversation', response: 'Model response',
+      deleteConfirm: 'Permanently delete this conversation and all of its turns?', deleted: 'Conversation archive deleted.', previous: 'Previous', next: 'Next',
+    },
+    reviewRuns: {
+      title: 'Review runs', description: 'Scheduled and manual runs share one queue and claim unreviewed turns in bounded batches.', runNow: 'Review now', queueing: 'Queueing…', queued: 'Review run queued.',
+      disabledHint: 'Save a configuration with Prompt Audit, conversation recording, and periodic review enabled first.', created: 'Created', trigger: 'Trigger', status: 'Status', result: 'Result', error: 'Error', empty: 'No review runs yet.',
+    },
     saveBar: { enabled: 'Enable prompt audit', blocking: 'Synchronous blocking', blockingLatestTurnOnly: 'Only latest input and prior output', storePass: 'Store safe events', dirty: 'Unsaved changes', synced: 'Configuration synced' },
     blockingConfirm: {
       title: 'Enable synchronous blocking?',
@@ -91,10 +103,10 @@ export default {
     },
     messages: { saved: 'Prompt Audit configuration saved; plaintext API Key state was cleared.', probeSucceeded: 'The audit node is reachable.', deleted: 'Deleted {count} audit events.' },
     errors: {
-      loadConfig: 'Unable to load Prompt Audit configuration.', loadRuntime: 'Unable to load Prompt Audit runtime.', loadGroups: 'Unable to load groups.', loadEvents: 'Unable to load audit events.', loadDetail: 'Unable to load event details.', saveConfig: 'Unable to save the configuration.', probe: 'Node probe failed.', delete: 'Unable to delete events.', previewDelete: 'Unable to create a deletion preview. Check the time range.', deleteConfirmation: 'The deletion confirmation is invalid or expired. Preview again.',
+      loadConfig: 'Unable to load Prompt Audit configuration.', loadRuntime: 'Unable to load Prompt Audit runtime.', loadGroups: 'Unable to load groups.', loadEvents: 'Unable to load audit events.', loadDetail: 'Unable to load event details.', loadConversations: 'Unable to load archived conversations.', loadConversationDetail: 'Unable to load conversation details.', deleteConversation: 'Unable to delete the conversation.', loadReviewRuns: 'Unable to load review runs.', runReview: 'Unable to queue a review run.', saveConfig: 'Unable to save the configuration.', probe: 'Node probe failed.', delete: 'Unable to delete events.', previewDelete: 'Unable to create a deletion preview. Check the time range.', deleteConfirmation: 'The deletion confirmation is invalid or expired. Preview again.',
       prompt_audit_config_conflict: 'Another administrator updated this configuration. Reload the server version before deciding how to merge your draft.',
       prompt_audit_encryption_key_required: 'No fixed encryption key is configured, so audit node API Keys would be lost on restart. Set the TOTP_ENCRYPTION_KEY environment variable and restart the service first.',
-      prompt_guard_requires_audit_enabled: 'Enable Prompt Audit before synchronous blocking.', prompt_audit_invalid_endpoint: 'The audit node configuration is invalid.', prompt_audit_endpoint_required: 'Enable at least one audit node before enabling Prompt Audit.', prompt_audit_groups_required: 'Select at least one group in selected-group mode.', prompt_audit_scanners_required: 'Enable at least one risk category.',
+      prompt_guard_requires_audit_enabled: 'Enable Prompt Audit before synchronous blocking.', conversation_review_requires_recording: 'Enable Prompt Audit and conversation recording before periodic review.', prompt_audit_invalid_endpoint: 'The audit node configuration is invalid.', prompt_audit_endpoint_required: 'Enable at least one audit node before enabling Prompt Audit.', prompt_audit_groups_required: 'Select at least one group in selected-group mode.', prompt_audit_scanners_required: 'Enable at least one risk category.',
     },
   },
 }

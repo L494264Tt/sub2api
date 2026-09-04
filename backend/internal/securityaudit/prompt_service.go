@@ -23,13 +23,14 @@ type PromptService struct {
 	metrics   *AtomicMetrics
 	clock     Clock
 
-	lifecycleMu  sync.Mutex
-	cancel       context.CancelFunc
-	background   context.Context
-	enqueueWG    sync.WaitGroup
-	enqueueSlots chan struct{}
-	probeMu      sync.RWMutex
-	probes       map[string]ProbeResult
+	lifecycleMu               sync.Mutex
+	cancel                    context.CancelFunc
+	background                context.Context
+	lastConversationCleanupAt time.Time
+	enqueueWG                 sync.WaitGroup
+	enqueueSlots              chan struct{}
+	probeMu                   sync.RWMutex
+	probes                    map[string]ProbeResult
 }
 
 func NewPromptService(
@@ -63,6 +64,8 @@ func (s *PromptService) Start(ctx context.Context) error {
 	s.lifecycleMu.Unlock()
 	configErr := s.config.Start(background)
 	workerErr := s.runner.Start(background)
+	s.enqueueWG.Add(1)
+	go s.conversationReviewLoop(background)
 	return errors.Join(configErr, workerErr)
 }
 

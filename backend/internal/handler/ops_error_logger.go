@@ -20,6 +20,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
+	"github.com/Wei-Shaw/sub2api/internal/securityaudit"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
@@ -527,22 +528,24 @@ type opsCaptureWriter struct {
 }
 
 type opsCaptureWriterState struct {
-	mu             sync.RWMutex
-	inFlight       sync.WaitGroup
-	generation     uint64
-	responseWriter gin.ResponseWriter
-	limit          int
-	buf            bytes.Buffer
-	probe          []byte
-	lineProbe      []byte
-	frameLineLen   int
-	frameTruncated bool
-	lineTruncated  bool
-	skipLF         bool
-	sseCapturing   bool
-	terminalError  parsedOpsError
-	terminalFound  bool
-	ctx            *gin.Context
+	mu                sync.RWMutex
+	inFlight          sync.WaitGroup
+	generation        uint64
+	responseWriter    gin.ResponseWriter
+	limit             int
+	buf               bytes.Buffer
+	conversationLimit int
+	conversationBuf   bytes.Buffer
+	probe             []byte
+	lineProbe         []byte
+	frameLineLen      int
+	frameTruncated    bool
+	lineTruncated     bool
+	skipLF            bool
+	sseCapturing      bool
+	terminalError     parsedOpsError
+	terminalFound     bool
+	ctx               *gin.Context
 }
 
 const (
@@ -581,6 +584,8 @@ func acquireOpsCaptureWriterFromPool(pool opsCaptureWriterStatePool, rw gin.Resp
 	state.responseWriter = rw
 	state.limit = opsCaptureWriterLimit
 	state.buf.Reset()
+	state.conversationLimit = 0
+	state.conversationBuf.Reset()
 	state.probe = state.probe[:0]
 	state.lineProbe = state.lineProbe[:0]
 	state.frameLineLen = 0
@@ -616,6 +621,7 @@ func releaseOpsCaptureWriter(w *opsCaptureWriter) {
 	state.inFlight.Wait()
 	state.mu.Lock()
 	state.limit = opsCaptureWriterLimit
+	state.conversationLimit = 0
 	state.probe = state.probe[:0]
 	state.lineProbe = state.lineProbe[:0]
 	state.frameLineLen = 0
@@ -627,6 +633,7 @@ func releaseOpsCaptureWriter(w *opsCaptureWriter) {
 	state.terminalFound = false
 	poolable := shouldPoolOpsCaptureWriterState(state)
 	state.buf.Reset()
+	state.conversationBuf.Reset()
 	state.mu.Unlock()
 	if poolable && w.pool != nil {
 		w.pool.Put(state)
@@ -635,8 +642,14 @@ func releaseOpsCaptureWriter(w *opsCaptureWriter) {
 
 func shouldPoolOpsCaptureWriterState(state *opsCaptureWriterState) bool {
 	return state != nil && state.buf.Cap() <= opsCaptureWriterPoolMaxRetainedCapacity &&
+		state.conversationBuf.Cap() <= opsConversationCapturePoolMaxRetainedCapacity &&
 		cap(state.probe) <= opsTerminalSSEFrameProbeLimit && cap(state.lineProbe) <= 256
 }
+
+const (
+	maxConversationCaptureBufferBytes             = securityaudit.MaxConversationCaptureRunes*utf8.UTFMax + 64*1024
+	opsConversationCapturePoolMaxRetainedCapacity = 256 * 1024
+)
 
 func (w *opsCaptureWriter) lockActive() (*opsCaptureWriterState, gin.ResponseWriter) {
 	if w == nil || w.state == nil {
@@ -701,6 +714,30 @@ func (w *opsCaptureWriter) capturedBytes() []byte {
 	}
 	defer state.mu.RUnlock()
 	return append([]byte(nil), state.buf.Bytes()...)
+}
+
+func (w *opsCaptureWriter) enableConversationCapture(limit int) {
+	state, _ := w.lockActiveWrite()
+	if state == nil {
+		return
+	}
+	if limit < 0 {
+		limit = 0
+	}
+	if limit > maxConversationCaptureBufferBytes {
+		limit = maxConversationCaptureBufferBytes
+	}
+	state.conversationLimit = limit
+	state.mu.Unlock()
+}
+
+func (w *opsCaptureWriter) capturedConversationBytes() []byte {
+	state, _ := w.lockActive()
+	if state == nil {
+		return nil
+	}
+	defer state.mu.RUnlock()
+	return append([]byte(nil), state.conversationBuf.Bytes()...)
 }
 
 func (w *opsCaptureWriter) capturedTerminalError() (parsedOpsError, bool) {
@@ -814,6 +851,7 @@ func (w *opsCaptureWriter) Write(b []byte) (int, error) {
 		return 0, nil
 	}
 	if state.shouldCapture() {
+		state.appendConversationResponse(b)
 		state.captureResponseChunk(b, rw.Status())
 	}
 	state.mu.Unlock()
@@ -827,6 +865,7 @@ func (w *opsCaptureWriter) WriteString(s string) (int, error) {
 		return 0, nil
 	}
 	if state.shouldCapture() {
+		state.appendConversationResponse([]byte(s))
 		state.captureResponseChunk([]byte(s), rw.Status())
 	}
 	state.mu.Unlock()
@@ -1059,6 +1098,20 @@ func (state *opsCaptureWriterState) appendCapturedResponse(chunk []byte) {
 		chunk = chunk[:remaining]
 	}
 	_, _ = state.buf.Write(chunk)
+}
+
+func (state *opsCaptureWriterState) appendConversationResponse(chunk []byte) {
+	if state == nil || state.conversationLimit <= 0 || len(chunk) == 0 {
+		return
+	}
+	remaining := state.conversationLimit - state.conversationBuf.Len()
+	if remaining <= 0 {
+		return
+	}
+	if len(chunk) > remaining {
+		chunk = chunk[:remaining]
+	}
+	_, _ = state.conversationBuf.Write(chunk)
 }
 
 func (state *opsCaptureWriterState) shouldCapture() bool {

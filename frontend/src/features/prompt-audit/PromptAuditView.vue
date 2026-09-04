@@ -51,6 +51,7 @@
               />
               <div v-if="loadErrors.groups" role="alert" class="mt-5 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">{{ loadErrors.groups }}</div>
               <PolicyPanel :draft="draft" :groups="groups" @update:draft="replaceDraft" />
+              <ConversationPolicyPanel :draft="draft" @update:draft="replaceDraft" />
             </template>
           </div>
 
@@ -85,6 +86,14 @@
               @batch-delete="requestBatchDelete"
               @preview-delete="requestFilterDeletePreview"
             />
+          </div>
+
+          <div v-if="activeTab === 'conversations'" data-test="tab-panel-conversations">
+            <ConversationWorkspace />
+          </div>
+
+          <div v-if="activeTab === 'review-runs'" data-test="tab-panel-review-runs">
+            <ConversationReviewRuns :enabled="Boolean(serverConfig?.enabled && serverConfig?.conversation_recording_enabled && serverConfig?.conversation_review_enabled)" />
           </div>
         </main>
       </template>
@@ -153,6 +162,9 @@ import { extractApiErrorCode, extractApiErrorMessage } from '@/utils/apiError'
 import RuntimeOverview from './components/RuntimeOverview.vue'
 import EndpointPool from './components/EndpointPool.vue'
 import PolicyPanel from './components/PolicyPanel.vue'
+import ConversationPolicyPanel from './components/ConversationPolicyPanel.vue'
+import ConversationWorkspace from './components/ConversationWorkspace.vue'
+import ConversationReviewRuns from './components/ConversationReviewRuns.vue'
 import EventWorkspace from './components/EventWorkspace.vue'
 import EventDetailDialog from './components/EventDetailDialog.vue'
 import FilterDeleteDialog from './components/FilterDeleteDialog.vue'
@@ -173,10 +185,12 @@ import { buildUpdateRequest, cloneData, configToDraft, draftFingerprint, emptyEv
 
 const { t, locale } = useI18n()
 const appStore = useAppStore()
-type PromptAuditPageTab = 'config' | 'events'
+type PromptAuditPageTab = 'config' | 'events' | 'conversations' | 'review-runs'
 const activeTab = ref<PromptAuditPageTab>('events')
 const pageTabs = computed(() => [
   { id: 'events' as const, label: t('admin.promptAudit.tabs.events') },
+  { id: 'conversations' as const, label: t('admin.promptAudit.tabs.conversations') },
+  { id: 'review-runs' as const, label: t('admin.promptAudit.tabs.reviewRuns') },
   { id: 'config' as const, label: t('admin.promptAudit.tabs.config') },
 ])
 const serverConfig = ref<PromptAuditDraft | null>(null)
@@ -296,7 +310,12 @@ function updateEndpoints(value: PromptAuditEndpointDraft[]) {
 }
 function setEnabled(value: boolean) {
   if (!draft.value) return
-  replaceDraft({ ...draft.value, enabled: value, blocking_enabled: value ? draft.value.blocking_enabled : false })
+  replaceDraft({
+    ...draft.value,
+    enabled: value,
+    blocking_enabled: value ? draft.value.blocking_enabled : false,
+    conversation_review_enabled: value ? draft.value.conversation_review_enabled : false,
+  })
 }
 function setBlocking(value: boolean) {
   if (!draft.value || !draft.value.enabled) return

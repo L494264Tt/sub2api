@@ -11,8 +11,13 @@ import type {
   PromptEventPage,
   PromptProbeResult,
   PromptAuditEndpointDraft,
+  ConversationFilters,
+  ConversationPage,
+  ConversationReviewRun,
+  ConversationReviewRunPage,
+  ConversationSession,
 } from './types'
-import { eventFilterPayload, eventQueryParams } from './viewModel'
+import { conversationQueryParams, eventFilterPayload, eventQueryParams } from './viewModel'
 
 const basePath = '/admin/prompt-audit'
 
@@ -103,6 +108,35 @@ export async function listGroups(): Promise<PromptAuditGroup[]> {
   return data
 }
 
+export async function listConversations(filters: ConversationFilters, page: number, pageSize: number): Promise<ConversationPage> {
+  const { data } = await apiClient.get<ConversationPage>(`${basePath}/conversations`, {
+    params: { page, page_size: pageSize, ...conversationQueryParams(filters) },
+  })
+  return data
+}
+
+export async function getConversation(id: number): Promise<ConversationSession> {
+  const { data } = await apiClient.get<ConversationSession>(`${basePath}/conversations/${id}`)
+  return data
+}
+
+export async function deleteConversation(id: number): Promise<{ deleted_sessions: number; deleted_turns: number }> {
+  const { data } = await apiClient.delete<{ deleted_sessions: number; deleted_turns: number }>(`${basePath}/conversations/${id}`)
+  return data
+}
+
+export async function listConversationReviewRuns(page: number, pageSize: number): Promise<ConversationReviewRunPage> {
+  const { data } = await apiClient.get<ConversationReviewRunPage>(`${basePath}/conversation-review/runs`, {
+    params: { page, page_size: pageSize },
+  })
+  return data
+}
+
+export async function runConversationReview(): Promise<ConversationReviewRun> {
+  const { data } = await apiClient.post<ConversationReviewRun>(`${basePath}/conversation-review/run`)
+  return data
+}
+
 export const promptAuditAPI = {
   getConfig,
   updateConfig,
@@ -115,6 +149,11 @@ export const promptAuditAPI = {
   previewDelete,
   deleteEventsByFilter,
   listGroups,
+  listConversations,
+  getConversation,
+  deleteConversation,
+  listConversationReviewRuns,
+  runConversationReview,
 }
 
 export default promptAuditAPI

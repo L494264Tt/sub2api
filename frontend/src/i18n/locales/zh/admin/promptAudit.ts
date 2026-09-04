@@ -3,7 +3,7 @@ export default {
     title: '提示词审计',
     description: '通过 OpenAI 兼容 Qwen3Guard 节点异步复核或同步阻止用户输入；事件的完整提示词会入库保存，仅供管理员复核。',
     configVersion: '配置版本 v{version}',
-    tabs: { config: '配置', events: '事件' },
+    tabs: { config: '配置', events: '事件', conversations: '会话归档', reviewRuns: '审查任务' },
     actions: { refresh: '刷新运行态', retry: '重试', Allow: '放行', Warn: '警告', Block: '阻止' },
     common: { actions: '操作', never: '从未' },
     mode: { off: '已关闭', async_audit: '异步只审计', blocking: '同步审计并阻止' },
@@ -55,6 +55,18 @@ export default {
       searchGroups: '搜索分组', noGroups: '没有匹配分组', missingGroups: '配置中包含已删除的分组 ID', selectedCount: '已选择 {count} 个分组',
       scanners: 'Qwen3Guard 输入风险分类', workerCount: 'Worker 数量', queueCapacity: '持久队列容量', strategy: '节点策略', strategyHint: '按配置顺序优先尝试，必要时故障切换。',
     },
+    conversations: {
+      title: '会话归档', description: '查看已记录的用户对话、模型回复和逐轮审查状态。', configTitle: '会话记录与定期审查',
+      configDescription: '记录适用分组的成功对话回复，并按周期使用当前 Guard 节点复审。', recording: '记录会话与模型回复', periodicReview: '启用定期对话审查',
+      privacyHint: '归档内容属于敏感数据。功能默认关闭，删除会话会级联删除全部轮次。', interval: '审查间隔（分钟）', batchSize: '每批轮次数', retention: '保留天数',
+      requestLimit: '单轮请求字符上限', responseLimit: '单轮回复字符上限', keyword: '搜索对话内容', conversationId: '外部会话 ID', allStatuses: '全部审查状态', allDecisions: '全部审查结论',
+      lastTurn: '最近一轮', reviewState: '审查状态', empty: '没有符合条件的会话归档。', sessions: '个会话', detailTitle: '会话详情', request: '用户对话', response: '模型回复',
+      deleteConfirm: '永久删除这个会话及其全部轮次？', deleted: '会话归档已删除。', previous: '上一页', next: '下一页',
+    },
+    reviewRuns: {
+      title: '审查任务', description: '定时任务和手动任务共用同一队列，逐批领取尚未审查的轮次。', runNow: '立即审查', queueing: '正在入队…', queued: '审查任务已入队。',
+      disabledHint: '保存配置并同时启用提示词审计、会话归档和定期审查后才能执行。', created: '创建时间', trigger: '触发方式', status: '状态', result: '处理结果', error: '错误', empty: '尚无审查任务。',
+    },
     saveBar: { enabled: '启用提示词审计', blocking: '同步阻止', blockingLatestTurnOnly: '仅审最新输入和上一轮输出', storePass: '保存安全事件', dirty: '有未保存的更改', synced: '配置已同步' },
     blockingConfirm: {
       title: '开启同步阻止？',
@@ -91,10 +103,10 @@ export default {
     },
     messages: { saved: '提示词审计配置已保存，明文 API Key 状态已清除。', probeSucceeded: '审计节点连接正常。', deleted: '已删除 {count} 条审计事件。' },
     errors: {
-      loadConfig: '无法加载提示词审计配置。', loadRuntime: '无法加载提示词审计运行态。', loadGroups: '无法加载分组列表。', loadEvents: '无法加载审计事件。', loadDetail: '无法加载事件详情。', saveConfig: '配置保存失败。', probe: '节点探测失败。', delete: '事件删除失败。', previewDelete: '无法生成删除预览，请检查时间范围。', deleteConfirmation: '删除确认无效或已过期，请重新预览。',
+      loadConfig: '无法加载提示词审计配置。', loadRuntime: '无法加载提示词审计运行态。', loadGroups: '无法加载分组列表。', loadEvents: '无法加载审计事件。', loadDetail: '无法加载事件详情。', loadConversations: '无法加载会话归档。', loadConversationDetail: '无法加载会话详情。', deleteConversation: '会话删除失败。', loadReviewRuns: '无法加载审查任务。', runReview: '无法创建审查任务。', saveConfig: '配置保存失败。', probe: '节点探测失败。', delete: '事件删除失败。', previewDelete: '无法生成删除预览，请检查时间范围。', deleteConfirmation: '删除确认无效或已过期，请重新预览。',
       prompt_audit_config_conflict: '配置已被其他管理员更新。请重新加载服务端配置，再决定如何合并本地草稿。',
       prompt_audit_encryption_key_required: '未配置固定加密密钥，审计节点 API Key 将在服务重启后失效。请先设置 TOTP_ENCRYPTION_KEY 环境变量并重启服务。',
-      prompt_guard_requires_audit_enabled: '开启同步阻止前必须先启用提示词审计。', prompt_audit_invalid_endpoint: '审计节点配置无效。', prompt_audit_endpoint_required: '启用审计前至少需要一个启用节点。', prompt_audit_groups_required: '指定分组模式至少需要选择一个分组。', prompt_audit_scanners_required: '至少需要启用一个风险分类。',
+      prompt_guard_requires_audit_enabled: '开启同步阻止前必须先启用提示词审计。', conversation_review_requires_recording: '启用定期审查前必须同时启用提示词审计和会话归档。', prompt_audit_invalid_endpoint: '审计节点配置无效。', prompt_audit_endpoint_required: '启用审计前至少需要一个启用节点。', prompt_audit_groups_required: '指定分组模式至少需要选择一个分组。', prompt_audit_scanners_required: '至少需要启用一个风险分类。',
     },
   },
 }

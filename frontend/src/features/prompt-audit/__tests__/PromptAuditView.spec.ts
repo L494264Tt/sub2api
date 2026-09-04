@@ -178,7 +178,7 @@ describe('PromptAuditView', () => {
     await flushPromises()
     await wrapper.get('[data-test="tab-config"]').trigger('click')
     const switches = wrapper.findAll('[role="switch"]')
-    expect(switches).toHaveLength(4)
+    expect(switches).toHaveLength(6)
     expect(switches.every((item) => Boolean(item.attributes('aria-label')))).toBe(true)
     expect(wrapper.html()).toContain('fixed inset-x-0 bottom-0')
     expect(wrapper.html()).toContain('flex-wrap')

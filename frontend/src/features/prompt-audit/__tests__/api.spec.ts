@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { emptyEventFilters } from '../viewModel'
+import { emptyConversationFilters, emptyEventFilters } from '../viewModel'
 
 const client = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), post: vi.fn(), delete: vi.fn() }))
 vi.mock('@/api/client', () => ({ apiClient: client }))
@@ -40,5 +40,20 @@ describe('Prompt Audit API', () => {
     expect(client.post).toHaveBeenCalledWith('/admin/prompt-audit/events/delete-by-filter', expect.objectContaining({
       snapshot_max_id: 10, filter_hash: 'a'.repeat(64), confirmation_token: 'opaque-token', confirm: true,
     }))
+  })
+
+  it('uses dedicated conversation archive and review-run endpoints', async () => {
+    client.get.mockResolvedValue({ data: { items: [], total: 0, page: 1, page_size: 20, pages: 0 } })
+    const filters = emptyConversationFilters()
+    filters.keyword = 'needle'
+    filters.group_id = '7'
+    await promptAuditAPI.listConversations(filters, 1, 20)
+    expect(client.get).toHaveBeenCalledWith('/admin/prompt-audit/conversations', {
+      params: expect.objectContaining({ page: 1, page_size: 20, keyword: 'needle', group_id: 7 }),
+    })
+
+    client.post.mockResolvedValue({ data: { id: 12, status: 'queued' } })
+    await promptAuditAPI.runConversationReview()
+    expect(client.post).toHaveBeenCalledWith('/admin/prompt-audit/conversation-review/run')
   })
 })

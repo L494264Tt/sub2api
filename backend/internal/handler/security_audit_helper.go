@@ -15,6 +15,7 @@ import (
 const securityAuditCompletedContextKey = "sub2api.security_audit.completed"
 const securityAuditWSTurnContextKey = "sub2api.security_audit.ws_turn"
 const securityAuditWSDedupeContextKey = "sub2api.security_audit.ws_dedupe"
+const conversationAuditRequestContextKey = "sub2api.conversation_audit.request"
 
 type securityAuditWSDedupeEntry struct {
 	stage    string
@@ -75,6 +76,8 @@ func runSecurityAudit(c *gin.Context, reqLog *zap.Logger, coordinator *securitya
 			return nil
 		}
 	}
+	request := buildSecurityAuditRequest(c, apiKey, subject, protocol, model, body, stage)
+	c.Set(conversationAuditRequestContextKey, request.Clone())
 	if coordinator == nil {
 		legacyDecision := runContentModeration(c, reqLog, legacy, apiKey, subject, protocol, model, body)
 		if legacyDecision == nil {
@@ -94,7 +97,6 @@ func runSecurityAudit(c *gin.Context, reqLog *zap.Logger, coordinator *securitya
 		}
 		return &decision
 	}
-	request := buildSecurityAuditRequest(c, apiKey, subject, protocol, model, body, stage)
 	if isSecurityAuditWebSocketStage(request.Stage) {
 		if turnNo, ok := securityAuditWSTurn(c); ok {
 			bodyHash := sha256.Sum256(body)
@@ -164,6 +166,7 @@ func buildSecurityAuditRequest(c *gin.Context, apiKey *service.APIKey, subject m
 		APIKeyID: legacy.APIKeyID, APIKeyName: legacy.APIKeyName, GroupID: cloneSecurityAuditGroupID(legacy.GroupID),
 		GroupName: legacy.GroupName, Provider: legacy.Provider, Endpoint: legacy.Endpoint,
 		Protocol: legacy.Protocol, Model: legacy.Model, Body: body, Stage: strings.TrimSpace(stage),
+		ConversationID: strings.TrimSpace(c.GetHeader("X-Conversation-ID")),
 	}
 	if apiKey != nil && apiKey.User != nil {
 		request.Username = apiKey.User.Username
