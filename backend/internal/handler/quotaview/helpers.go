@@ -58,20 +58,20 @@ func buildWindowSlice(usage float64, limit *float64, start *time.Time, expired b
 	return out
 }
 
-// NeedsDailyReset 判断日窗口是否已过期：start 早于「全局时区当天 0 点」即过期。
+// NeedsDailyReset 判断日窗口是否已过期：start 早于「全局时区当前配额日 07:00」即过期。
 // 时区跟随 timezone.Location()（全局服务器时区），与 billing / repo 写入的 window_start 同口径。
 func NeedsDailyReset(start *time.Time, now time.Time) bool {
 	if start == nil {
 		return false
 	}
-	return start.Before(timezone.StartOfDay(now))
+	return start.Before(timezone.StartOfQuotaDay(now))
 }
 
 func NeedsWeeklyReset(start *time.Time, now time.Time) bool {
 	if start == nil {
 		return false
 	}
-	return start.Before(timezone.StartOfWeek(now))
+	return start.Before(timezone.StartOfQuotaWeek(now))
 }
 
 // NeedsMonthlyReset 30 天滚动窗口语义（与订阅模式 NeedsMonthlyReset 一致）。
@@ -83,11 +83,11 @@ func NeedsMonthlyReset(start *time.Time, now time.Time) bool {
 }
 
 func nextDailyResetTime(now time.Time) time.Time {
-	return timezone.StartOfDay(now).AddDate(0, 0, 1)
+	return timezone.StartOfQuotaDay(now).AddDate(0, 0, 1)
 }
 
 func nextWeeklyResetTime(now time.Time) time.Time {
-	return timezone.StartOfWeek(now).AddDate(0, 0, 7)
+	return timezone.StartOfQuotaWeek(now).AddDate(0, 0, 7)
 }
 
 // NextMonthlyResetTimeFrom 计算 30 天滚动月度窗口的下次重置时间。

@@ -56,7 +56,11 @@ func TestAPIContracts(t *testing.T) {
 						"balance": 12.5,
 						"frozen_balance": 0,
 						"concurrency": 5,
-					"rpm_limit": 0,
+						"rpm_limit": 0,
+						"token_limit_1d": 0,
+						"token_limit_7d": 0,
+						"token_limit_30d": 0,
+						"model_restrictions": null,
 					"status": "active",
 					"allowed_groups": null,
 					"created_at": "2025-01-02T03:04:05Z",
@@ -1655,7 +1659,7 @@ func (r *stubUserRepo) UpdateConcurrency(ctx context.Context, id int64, amount i
 
 func (r *stubUserRepo) BatchSetConcurrency(context.Context, []int64, int) (int, error) { return 0, nil }
 func (r *stubUserRepo) BatchAddConcurrency(context.Context, []int64, int) (int, error) { return 0, nil }
-func (r *stubUserRepo) BatchUpdateLimits(context.Context, []int64, *int, *int) (int, error) {
+func (r *stubUserRepo) BatchUpdateLimits(context.Context, []int64, *int, *int, *int64, *int64, *int64, bool) (int, error) {
 	return 0, nil
 }
 
@@ -2552,6 +2556,10 @@ func newStubUsageLogRepo() *stubUsageLogRepo {
 
 func (r *stubUsageLogRepo) SetUserLogs(userID int64, logs []service.UsageLog) {
 	r.userLogs[userID] = logs
+}
+
+func (r *stubUsageLogRepo) GetUserTokenUsage(context.Context, int64, time.Time, time.Time) (*service.UserTokenUsage, error) {
+	return &service.UserTokenUsage{}, nil
 }
 
 func (r *stubUsageLogRepo) Create(ctx context.Context, log *service.UsageLog) (bool, error) {

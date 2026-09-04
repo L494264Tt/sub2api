@@ -48594,6 +48594,15 @@ type UserMutation struct {
 	addtotal_recharged            *float64
 	rpm_limit                     *int
 	addrpm_limit                  *int
+	token_limit_1d                *int64
+	addtoken_limit_1d             *int64
+	token_limit_7d                *int64
+	addtoken_limit_7d             *int64
+	token_limit_30d               *int64
+	addtoken_limit_30d            *int64
+	token_quota_started_at        *time.Time
+	model_restrictions            *[]domain.UserModelRestriction
+	appendmodel_restrictions      []domain.UserModelRestriction
 	clearedFields                 map[string]struct{}
 	api_keys                      map[int64]struct{}
 	removedapi_keys               map[int64]struct{}
@@ -49836,6 +49845,261 @@ func (m *UserMutation) ResetRpmLimit() {
 	m.addrpm_limit = nil
 }
 
+// SetTokenLimit1d sets the "token_limit_1d" field.
+func (m *UserMutation) SetTokenLimit1d(i int64) {
+	m.token_limit_1d = &i
+	m.addtoken_limit_1d = nil
+}
+
+// TokenLimit1d returns the value of the "token_limit_1d" field in the mutation.
+func (m *UserMutation) TokenLimit1d() (r int64, exists bool) {
+	v := m.token_limit_1d
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTokenLimit1d returns the old "token_limit_1d" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldTokenLimit1d(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTokenLimit1d is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTokenLimit1d requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTokenLimit1d: %w", err)
+	}
+	return oldValue.TokenLimit1d, nil
+}
+
+// AddTokenLimit1d adds i to the "token_limit_1d" field.
+func (m *UserMutation) AddTokenLimit1d(i int64) {
+	if m.addtoken_limit_1d != nil {
+		*m.addtoken_limit_1d += i
+	} else {
+		m.addtoken_limit_1d = &i
+	}
+}
+
+// AddedTokenLimit1d returns the value that was added to the "token_limit_1d" field in this mutation.
+func (m *UserMutation) AddedTokenLimit1d() (r int64, exists bool) {
+	v := m.addtoken_limit_1d
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTokenLimit1d resets all changes to the "token_limit_1d" field.
+func (m *UserMutation) ResetTokenLimit1d() {
+	m.token_limit_1d = nil
+	m.addtoken_limit_1d = nil
+}
+
+// SetTokenLimit7d sets the "token_limit_7d" field.
+func (m *UserMutation) SetTokenLimit7d(i int64) {
+	m.token_limit_7d = &i
+	m.addtoken_limit_7d = nil
+}
+
+// TokenLimit7d returns the value of the "token_limit_7d" field in the mutation.
+func (m *UserMutation) TokenLimit7d() (r int64, exists bool) {
+	v := m.token_limit_7d
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTokenLimit7d returns the old "token_limit_7d" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldTokenLimit7d(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTokenLimit7d is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTokenLimit7d requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTokenLimit7d: %w", err)
+	}
+	return oldValue.TokenLimit7d, nil
+}
+
+// AddTokenLimit7d adds i to the "token_limit_7d" field.
+func (m *UserMutation) AddTokenLimit7d(i int64) {
+	if m.addtoken_limit_7d != nil {
+		*m.addtoken_limit_7d += i
+	} else {
+		m.addtoken_limit_7d = &i
+	}
+}
+
+// AddedTokenLimit7d returns the value that was added to the "token_limit_7d" field in this mutation.
+func (m *UserMutation) AddedTokenLimit7d() (r int64, exists bool) {
+	v := m.addtoken_limit_7d
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTokenLimit7d resets all changes to the "token_limit_7d" field.
+func (m *UserMutation) ResetTokenLimit7d() {
+	m.token_limit_7d = nil
+	m.addtoken_limit_7d = nil
+}
+
+// SetTokenLimit30d sets the "token_limit_30d" field.
+func (m *UserMutation) SetTokenLimit30d(i int64) {
+	m.token_limit_30d = &i
+	m.addtoken_limit_30d = nil
+}
+
+// TokenLimit30d returns the value of the "token_limit_30d" field in the mutation.
+func (m *UserMutation) TokenLimit30d() (r int64, exists bool) {
+	v := m.token_limit_30d
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTokenLimit30d returns the old "token_limit_30d" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldTokenLimit30d(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTokenLimit30d is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTokenLimit30d requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTokenLimit30d: %w", err)
+	}
+	return oldValue.TokenLimit30d, nil
+}
+
+// AddTokenLimit30d adds i to the "token_limit_30d" field.
+func (m *UserMutation) AddTokenLimit30d(i int64) {
+	if m.addtoken_limit_30d != nil {
+		*m.addtoken_limit_30d += i
+	} else {
+		m.addtoken_limit_30d = &i
+	}
+}
+
+// AddedTokenLimit30d returns the value that was added to the "token_limit_30d" field in this mutation.
+func (m *UserMutation) AddedTokenLimit30d() (r int64, exists bool) {
+	v := m.addtoken_limit_30d
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTokenLimit30d resets all changes to the "token_limit_30d" field.
+func (m *UserMutation) ResetTokenLimit30d() {
+	m.token_limit_30d = nil
+	m.addtoken_limit_30d = nil
+}
+
+// SetTokenQuotaStartedAt sets the "token_quota_started_at" field.
+func (m *UserMutation) SetTokenQuotaStartedAt(t time.Time) {
+	m.token_quota_started_at = &t
+}
+
+// TokenQuotaStartedAt returns the value of the "token_quota_started_at" field in the mutation.
+func (m *UserMutation) TokenQuotaStartedAt() (r time.Time, exists bool) {
+	v := m.token_quota_started_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTokenQuotaStartedAt returns the old "token_quota_started_at" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldTokenQuotaStartedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTokenQuotaStartedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTokenQuotaStartedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTokenQuotaStartedAt: %w", err)
+	}
+	return oldValue.TokenQuotaStartedAt, nil
+}
+
+// ResetTokenQuotaStartedAt resets all changes to the "token_quota_started_at" field.
+func (m *UserMutation) ResetTokenQuotaStartedAt() {
+	m.token_quota_started_at = nil
+}
+
+// SetModelRestrictions sets the "model_restrictions" field.
+func (m *UserMutation) SetModelRestrictions(dmr []domain.UserModelRestriction) {
+	m.model_restrictions = &dmr
+	m.appendmodel_restrictions = nil
+}
+
+// ModelRestrictions returns the value of the "model_restrictions" field in the mutation.
+func (m *UserMutation) ModelRestrictions() (r []domain.UserModelRestriction, exists bool) {
+	v := m.model_restrictions
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldModelRestrictions returns the old "model_restrictions" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldModelRestrictions(ctx context.Context) (v []domain.UserModelRestriction, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldModelRestrictions is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldModelRestrictions requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldModelRestrictions: %w", err)
+	}
+	return oldValue.ModelRestrictions, nil
+}
+
+// AppendModelRestrictions adds dmr to the "model_restrictions" field.
+func (m *UserMutation) AppendModelRestrictions(dmr []domain.UserModelRestriction) {
+	m.appendmodel_restrictions = append(m.appendmodel_restrictions, dmr...)
+}
+
+// AppendedModelRestrictions returns the list of values that were appended to the "model_restrictions" field in this mutation.
+func (m *UserMutation) AppendedModelRestrictions() ([]domain.UserModelRestriction, bool) {
+	if len(m.appendmodel_restrictions) == 0 {
+		return nil, false
+	}
+	return m.appendmodel_restrictions, true
+}
+
+// ResetModelRestrictions resets all changes to the "model_restrictions" field.
+func (m *UserMutation) ResetModelRestrictions() {
+	m.model_restrictions = nil
+	m.appendmodel_restrictions = nil
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by ids.
 func (m *UserMutation) AddAPIKeyIDs(ids ...int64) {
 	if m.api_keys == nil {
@@ -50572,7 +50836,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 25)
+	fields := make([]string, 0, 29)
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
 	}
@@ -50648,6 +50912,21 @@ func (m *UserMutation) Fields() []string {
 	if m.rpm_limit != nil {
 		fields = append(fields, user.FieldRpmLimit)
 	}
+	if m.token_limit_1d != nil {
+		fields = append(fields, user.FieldTokenLimit1d)
+	}
+	if m.token_limit_7d != nil {
+		fields = append(fields, user.FieldTokenLimit7d)
+	}
+	if m.token_limit_30d != nil {
+		fields = append(fields, user.FieldTokenLimit30d)
+	}
+	if m.token_quota_started_at != nil {
+		fields = append(fields, user.FieldTokenQuotaStartedAt)
+	}
+	if m.model_restrictions != nil {
+		fields = append(fields, user.FieldModelRestrictions)
+	}
 	return fields
 }
 
@@ -50706,6 +50985,16 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.TotalRecharged()
 	case user.FieldRpmLimit:
 		return m.RpmLimit()
+	case user.FieldTokenLimit1d:
+		return m.TokenLimit1d()
+	case user.FieldTokenLimit7d:
+		return m.TokenLimit7d()
+	case user.FieldTokenLimit30d:
+		return m.TokenLimit30d()
+	case user.FieldTokenQuotaStartedAt:
+		return m.TokenQuotaStartedAt()
+	case user.FieldModelRestrictions:
+		return m.ModelRestrictions()
 	}
 	return nil, false
 }
@@ -50765,6 +51054,16 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldTotalRecharged(ctx)
 	case user.FieldRpmLimit:
 		return m.OldRpmLimit(ctx)
+	case user.FieldTokenLimit1d:
+		return m.OldTokenLimit1d(ctx)
+	case user.FieldTokenLimit7d:
+		return m.OldTokenLimit7d(ctx)
+	case user.FieldTokenLimit30d:
+		return m.OldTokenLimit30d(ctx)
+	case user.FieldTokenQuotaStartedAt:
+		return m.OldTokenQuotaStartedAt(ctx)
+	case user.FieldModelRestrictions:
+		return m.OldModelRestrictions(ctx)
 	}
 	return nil, fmt.Errorf("unknown User field %s", name)
 }
@@ -50949,6 +51248,41 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetRpmLimit(v)
 		return nil
+	case user.FieldTokenLimit1d:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTokenLimit1d(v)
+		return nil
+	case user.FieldTokenLimit7d:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTokenLimit7d(v)
+		return nil
+	case user.FieldTokenLimit30d:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTokenLimit30d(v)
+		return nil
+	case user.FieldTokenQuotaStartedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTokenQuotaStartedAt(v)
+		return nil
+	case user.FieldModelRestrictions:
+		v, ok := value.([]domain.UserModelRestriction)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetModelRestrictions(v)
+		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)
 }
@@ -50975,6 +51309,15 @@ func (m *UserMutation) AddedFields() []string {
 	if m.addrpm_limit != nil {
 		fields = append(fields, user.FieldRpmLimit)
 	}
+	if m.addtoken_limit_1d != nil {
+		fields = append(fields, user.FieldTokenLimit1d)
+	}
+	if m.addtoken_limit_7d != nil {
+		fields = append(fields, user.FieldTokenLimit7d)
+	}
+	if m.addtoken_limit_30d != nil {
+		fields = append(fields, user.FieldTokenLimit30d)
+	}
 	return fields
 }
 
@@ -50995,6 +51338,12 @@ func (m *UserMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedTotalRecharged()
 	case user.FieldRpmLimit:
 		return m.AddedRpmLimit()
+	case user.FieldTokenLimit1d:
+		return m.AddedTokenLimit1d()
+	case user.FieldTokenLimit7d:
+		return m.AddedTokenLimit7d()
+	case user.FieldTokenLimit30d:
+		return m.AddedTokenLimit30d()
 	}
 	return nil, false
 }
@@ -51045,6 +51394,27 @@ func (m *UserMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddRpmLimit(v)
+		return nil
+	case user.FieldTokenLimit1d:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTokenLimit1d(v)
+		return nil
+	case user.FieldTokenLimit7d:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTokenLimit7d(v)
+		return nil
+	case user.FieldTokenLimit30d:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTokenLimit30d(v)
 		return nil
 	}
 	return fmt.Errorf("unknown User numeric field %s", name)
@@ -51186,6 +51556,21 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldRpmLimit:
 		m.ResetRpmLimit()
+		return nil
+	case user.FieldTokenLimit1d:
+		m.ResetTokenLimit1d()
+		return nil
+	case user.FieldTokenLimit7d:
+		m.ResetTokenLimit7d()
+		return nil
+	case user.FieldTokenLimit30d:
+		m.ResetTokenLimit30d()
+		return nil
+	case user.FieldTokenQuotaStartedAt:
+		m.ResetTokenQuotaStartedAt()
+		return nil
+	case user.FieldModelRestrictions:
+		m.ResetModelRestrictions()
 		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)

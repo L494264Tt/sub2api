@@ -3,8 +3,11 @@ package service
 import (
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"golang.org/x/crypto/bcrypt"
 )
+
+type UserModelRestriction = domain.UserModelRestriction
 
 type User struct {
 	ID             int64
@@ -59,6 +62,13 @@ type User struct {
 	// 且该 (用户, 分组) 无 rpm_override 时作为全局兜底生效，计数键 rpm:u:{userID}:{min}。
 	RPMLimit int
 
+	// TokenLimit1d/7d/30d are rolling user-wide token ceilings. Zero is unlimited.
+	TokenLimit1d        int64
+	TokenLimit7d        int64
+	TokenLimit30d       int64
+	TokenQuotaStartedAt time.Time
+	ModelRestrictions   []UserModelRestriction
+
 	// UserGroupRPMOverride 来自 auth cache snapshot 的 (user, group) RPM 覆盖值。
 	// nil = 该 API Key 对应的 (user, group) 无 override；非 nil 时 checkRPM 直接使用，
 	// 避免每请求查 DB。字段不持久化到数据库。
@@ -74,6 +84,10 @@ func (u *User) IsAdmin() bool {
 
 func (u *User) IsActive() bool {
 	return u.Status == StatusActive
+}
+
+func (u *User) HasTokenLimit() bool {
+	return u != nil && (u.TokenLimit1d > 0 || u.TokenLimit7d > 0 || u.TokenLimit30d > 0)
 }
 
 // CanBindGroup checks whether a user can bind to a given group.

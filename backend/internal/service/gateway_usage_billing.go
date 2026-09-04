@@ -837,6 +837,9 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 
 	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
 		writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.gateway")
+		if user.HasTokenLimit() && s.billingCacheService != nil {
+			s.billingCacheService.IncrementUserTokenUsage(user.ID, user.TokenQuotaStartedAt, usageLog.RequestedModel, int64(usageLog.TotalTokens()))
+		}
 		logger.LegacyPrintf("service.gateway", "[SIMPLE MODE] Usage recorded (not billed): user=%d, tokens=%d", usageLog.UserID, usageLog.TotalTokens())
 		s.deferredService.ScheduleLastUsedUpdate(account.ID)
 		return nil
@@ -853,7 +856,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		}
 	}
 	requestID := usageLog.RequestID
-	_, billingErr := applyUsageBilling(ctx, requestID, usageLog, &postUsageBillingParams{
+	applied, billingErr := applyUsageBilling(ctx, requestID, usageLog, &postUsageBillingParams{
 		Cost:                  cost,
 		User:                  user,
 		APIKey:                apiKey,
@@ -872,6 +875,9 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		return billingErr
 	}
 	writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.gateway")
+	if applied && user.HasTokenLimit() && s.billingCacheService != nil {
+		s.billingCacheService.IncrementUserTokenUsage(user.ID, user.TokenQuotaStartedAt, usageLog.RequestedModel, int64(usageLog.TotalTokens()))
+	}
 
 	return nil
 }
