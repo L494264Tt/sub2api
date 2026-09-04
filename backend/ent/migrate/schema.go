@@ -1811,6 +1811,11 @@ var (
 		{Name: "balance_notify_extra_emails", Type: field.TypeString, Default: "[]", SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "total_recharged", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
 		{Name: "rpm_limit", Type: field.TypeInt, Default: 0},
+		{Name: "token_limit_1d", Type: field.TypeInt64, Default: 0},
+		{Name: "token_limit_7d", Type: field.TypeInt64, Default: 0},
+		{Name: "token_limit_30d", Type: field.TypeInt64, Default: 0},
+		{Name: "token_quota_started_at", Type: field.TypeTime},
+		{Name: "model_restrictions", Type: field.TypeJSON},
 	}
 	// UsersTable holds the schema information for the "users" table.
 	UsersTable = &schema.Table{

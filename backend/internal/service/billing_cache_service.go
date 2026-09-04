@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,30 +16,29 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-// 错误定义
-// 注：ErrInsufficientBalance在redeem_service.go中定义
-// 注：ErrDailyLimitExceeded/ErrWeeklyLimitExceeded/ErrMonthlyLimitExceeded在subscription_service.go中定义
-// errBillingCacheUnavailable 内部哨兵：用于 quota 校验路径在 cache==nil 时
-// 与"Redis 故障"走同一条 fail-open + DB 一次性检查的分支。
+// 閿欒瀹氫箟
+// 娉細ErrInsufficientBalance鍦╮edeem_service.go涓畾涔?// 娉細ErrDailyLimitExceeded/ErrWeeklyLimitExceeded/ErrMonthlyLimitExceeded鍦╯ubscription_service.go涓畾涔?// errBillingCacheUnavailable 鍐呴儴鍝ㄥ叺锛氱敤浜?quota 鏍￠獙璺緞鍦?cache==nil 鏃?// 涓?Redis 鏁呴殰"璧板悓涓€鏉?fail-open + DB 涓€娆℃€ф鏌ョ殑鍒嗘敮銆?
 var errBillingCacheUnavailable = fmt.Errorf("billing cache unavailable")
 
 var (
 	ErrSubscriptionInvalid       = infraerrors.Forbidden("SUBSCRIPTION_INVALID", "subscription is invalid or expired")
 	ErrBillingServiceUnavailable = infraerrors.ServiceUnavailable("BILLING_SERVICE_ERROR", "Billing service temporarily unavailable. Please retry later.")
-	// RPM 超限错误。gateway_handler 负责映射为 HTTP 429。
+	// RPM 瓒呴檺閿欒銆俫ateway_handler 璐熻矗鏄犲皠涓?HTTP 429銆?
 	ErrGroupRPMExceeded = infraerrors.TooManyRequests("GROUP_RPM_EXCEEDED", "group requests-per-minute limit exceeded")
 	ErrUserRPMExceeded  = infraerrors.TooManyRequests("USER_RPM_EXCEEDED", "user requests-per-minute limit exceeded")
 
-	// user × platform quota（HTTP 429 Too Many Requests + Retry-After header）。
-	// 选用 429 而非 403：限额耗尽属于"暂时性资源用尽，重试可恢复"的场景（RFC 6585），
-	// 大量 SDK（如 OpenAI 兼容客户端）只对 429 触发自动退避并读取 Retry-After，
-	// 用 403 会被视为"权限不足，重试无意义"导致客户端直接报错且不退避。
+	// user 脳 platform quota锛圚TTP 429 Too Many Requests + Retry-After header锛夈€?	// 閫夌敤 429 鑰岄潪 403锛氶檺棰濊€楀敖灞炰簬"鏆傛椂鎬ц祫婧愮敤灏斤紝閲嶈瘯鍙仮澶?鐨勫満鏅紙RFC 6585锛夛紝
+	// 澶ч噺 SDK锛堝 OpenAI 鍏煎瀹㈡埛绔級鍙 429 瑙﹀彂鑷姩閫€閬垮苟璇诲彇 Retry-After锛?
+	// 鐢?403 浼氳瑙嗕负"鏉冮檺涓嶈冻锛岄噸璇曟棤鎰忎箟"瀵艰嚧瀹㈡埛绔洿鎺ユ姤閿欎笖涓嶉€€閬裤€?
 	ErrUserPlatformDailyQuotaExhausted   = infraerrors.TooManyRequests("USER_PLATFORM_DAILY_QUOTA_EXHAUSTED", "Daily usage quota exhausted for this platform.")
 	ErrUserPlatformWeeklyQuotaExhausted  = infraerrors.TooManyRequests("USER_PLATFORM_WEEKLY_QUOTA_EXHAUSTED", "Weekly usage quota exhausted for this platform.")
 	ErrUserPlatformMonthlyQuotaExhausted = infraerrors.TooManyRequests("USER_PLATFORM_MONTHLY_QUOTA_EXHAUSTED", "Monthly usage quota exhausted for this platform.")
+	ErrUserToken1dQuotaExhausted         = infraerrors.TooManyRequests("USER_TOKEN_1D_QUOTA_EXHAUSTED", "Daily GPT token quota exhausted for this user.")
+	ErrUserToken7dQuotaExhausted         = infraerrors.TooManyRequests("USER_TOKEN_7D_QUOTA_EXHAUSTED", "7-day rolling GPT token quota exhausted for this user.")
+	ErrUserToken30dQuotaExhausted        = infraerrors.TooManyRequests("USER_TOKEN_30D_QUOTA_EXHAUSTED", "30-day rolling GPT token quota exhausted for this user.")
 )
 
-// subscriptionCacheData 订阅缓存数据结构（内部使用）
+// subscriptionCacheData 璁㈤槄缂撳瓨鏁版嵁缁撴瀯锛堝唴閮ㄤ娇鐢級
 type subscriptionCacheData struct {
 	Status       string
 	ExpiresAt    time.Time
@@ -48,7 +48,7 @@ type subscriptionCacheData struct {
 	Version      int64
 }
 
-// 缓存写入任务类型
+// 缂撳瓨鍐欏叆浠诲姟绫诲瀷
 type cacheWriteKind int
 
 const (
@@ -59,28 +59,25 @@ const (
 	cacheWriteUpdateRateLimitUsage
 )
 
-// 异步缓存写入工作池配置
+// 寮傛缂撳瓨鍐欏叆宸ヤ綔姹犻厤缃?//
+// 鎬ц兘浼樺寲璇存槑锛?// 鍘熷疄鐜板湪璇锋眰鐑矾寰勪腑浣跨敤 goroutine 寮傛鏇存柊缂撳瓨锛屽瓨鍦ㄤ互涓嬮棶棰橈細
+// 1. 姣忔璇锋眰鍒涘缓鏂?goroutine锛岄珮骞跺彂涓嬩骇鐢熷ぇ閲忕煭鐢熷懡鍛ㄦ湡 goroutine
+// 2. 鏃犳硶鎺у埗骞跺彂鏁伴噺锛屽彲鑳藉鑷?Redis 杩炴帴鑰楀敖
+// 3. goroutine 鍒涘缓/閿€姣佸甫鏉ラ澶栧紑閿€
 //
-// 性能优化说明：
-// 原实现在请求热路径中使用 goroutine 异步更新缓存，存在以下问题：
-// 1. 每次请求创建新 goroutine，高并发下产生大量短生命周期 goroutine
-// 2. 无法控制并发数量，可能导致 Redis 连接耗尽
-// 3. goroutine 创建/销毁带来额外开销
-//
-// 新实现使用固定大小的工作池：
-// 1. 预创建 10 个 worker goroutine，避免频繁创建销毁
-// 2. 使用带缓冲的 channel（1000）作为任务队列，平滑写入峰值
-// 3. 非阻塞写入，队列满时关键任务同步回退，非关键任务丢弃并告警
-// 4. 统一超时控制，避免慢操作阻塞工作池
+// 鏂板疄鐜颁娇鐢ㄥ浐瀹氬ぇ灏忕殑宸ヤ綔姹狅細
+// 1. 棰勫垱寤?10 涓?worker goroutine锛岄伩鍏嶉绻佸垱寤洪攢姣?// 2. 浣跨敤甯︾紦鍐茬殑 channel锛?000锛変綔涓轰换鍔￠槦鍒楋紝骞虫粦鍐欏叆宄板€?// 3. 闈為樆濉炲啓鍏ワ紝闃熷垪婊℃椂鍏抽敭浠诲姟鍚屾鍥為€€锛岄潪鍏抽敭浠诲姟涓㈠純骞跺憡璀?// 4. 缁熶竴瓒呮椂鎺у埗锛岄伩鍏嶆參鎿嶄綔闃诲宸ヤ綔姹?
 const (
-	cacheWriteWorkerCount     = 10              // 工作协程数量
-	cacheWriteBufferSize      = 1000            // 任务队列缓冲大小
-	cacheWriteTimeout         = 2 * time.Second // 单个写入操作超时
-	cacheWriteDropLogInterval = 5 * time.Second // 丢弃日志节流间隔
+	cacheWriteWorkerCount     = 10              // 宸ヤ綔鍗忕▼鏁伴噺
+	cacheWriteBufferSize      = 1000            // 浠诲姟闃熷垪缂撳啿澶у皬
+	cacheWriteTimeout         = 2 * time.Second // 鍗曚釜鍐欏叆鎿嶄綔瓒呮椂
+	cacheWriteDropLogInterval = 5 * time.Second // 涓㈠純鏃ュ織鑺傛祦闂撮殧
 	balanceLoadTimeout        = 3 * time.Second
+	userTokenUsageCacheTTL    = 30 * time.Second
+	userTokenUsageLoadTimeout = 3 * time.Second
 )
 
-// cacheWriteTask 缓存写入任务
+// cacheWriteTask 缂撳瓨鍐欏叆浠诲姟
 type cacheWriteTask struct {
 	kind             cacheWriteKind
 	userID           int64
@@ -101,8 +98,8 @@ type subscriptionCacheInvalidationPubSub interface {
 	SubscribeSubscriptionCacheInvalidation(ctx context.Context, handler func(cacheKey string)) error
 }
 
-// BillingCacheService 计费缓存服务
-// 负责余额和订阅数据的缓存管理，提供高性能的计费资格检查
+// BillingCacheService 璁¤垂缂撳瓨鏈嶅姟
+// 璐熻矗浣欓鍜岃闃呮暟鎹殑缂撳瓨绠＄悊锛屾彁渚涢珮鎬ц兘鐨勮璐硅祫鏍兼鏌?
 type BillingCacheService struct {
 	cache                 BillingCache
 	userRepo              UserRepository
@@ -113,6 +110,7 @@ type BillingCacheService struct {
 	cfg                   *config.Config
 	circuitBreaker        *billingCircuitBreaker
 	userPlatformQuotaRepo UserPlatformQuotaRepository
+	usageLogRepo          UsageLogRepository
 
 	cacheWriteChan     chan cacheWriteTask
 	cacheWriteWg       sync.WaitGroup
@@ -121,14 +119,21 @@ type BillingCacheService struct {
 	stopped            atomic.Bool
 	balanceLoadSF      singleflight.Group
 	quotaLoadSF        singleflight.Group
-	// 丢弃日志节流计数器（减少高负载下日志噪音）
+	tokenQuotaLoadSF   singleflight.Group
+	// 涓㈠純鏃ュ織鑺傛祦璁℃暟鍣紙鍑忓皯楂樿礋杞戒笅鏃ュ織鍣煶锛?
 	cacheWriteDropFullCount     uint64
 	cacheWriteDropFullLastLog   int64
 	cacheWriteDropClosedCount   uint64
 	cacheWriteDropClosedLastLog int64
 }
 
-// NewBillingCacheService 创建计费缓存服务
+func (s *BillingCacheService) SetUsageLogRepository(repo UsageLogRepository) {
+	if s != nil {
+		s.usageLogRepo = repo
+	}
+}
+
+// NewBillingCacheService 鍒涘缓璁¤垂缂撳瓨鏈嶅姟
 func NewBillingCacheService(
 	cache BillingCache,
 	userRepo UserRepository,
@@ -154,7 +159,7 @@ func NewBillingCacheService(
 	return svc
 }
 
-// Stop 关闭缓存写入工作池
+// Stop 鍏抽棴缂撳瓨鍐欏叆宸ヤ綔姹?
 func (s *BillingCacheService) Stop() {
 	s.cacheWriteStopOnce.Do(func() {
 		s.stopped.Store(true)
@@ -188,7 +193,7 @@ func (s *BillingCacheService) startCacheWriteWorkers() {
 	}
 }
 
-// enqueueCacheWrite 尝试将任务入队，队列满时返回 false（并记录告警）。
+// enqueueCacheWrite 灏濊瘯灏嗕换鍔″叆闃燂紝闃熷垪婊℃椂杩斿洖 false锛堝苟璁板綍鍛婅锛夈€?
 func (s *BillingCacheService) enqueueCacheWrite(task cacheWriteTask) (enqueued bool) {
 	if s.stopped.Load() {
 		s.logCacheWriteDrop(task, "closed")
@@ -207,7 +212,7 @@ func (s *BillingCacheService) enqueueCacheWrite(task cacheWriteTask) (enqueued b
 	case s.cacheWriteChan <- task:
 		return true
 	default:
-		// 队列满时不阻塞主流程，交由调用方决定是否同步回退。
+		// 闃熷垪婊℃椂涓嶉樆濉炰富娴佺▼锛屼氦鐢辫皟鐢ㄦ柟鍐冲畾鏄惁鍚屾鍥為€€銆?
 		s.logCacheWriteDrop(task, "full")
 		return false
 	}
@@ -245,7 +250,7 @@ func (s *BillingCacheService) cacheWriteWorker(ch <-chan cacheWriteTask) {
 	}
 }
 
-// cacheWriteKindName 用于日志中的任务类型标识，便于排查丢弃原因。
+// cacheWriteKindName 鐢ㄤ簬鏃ュ織涓殑浠诲姟绫诲瀷鏍囪瘑锛屼究浜庢帓鏌ヤ涪寮冨師鍥犮€?
 func cacheWriteKindName(kind cacheWriteKind) string {
 	switch kind {
 	case cacheWriteSetBalance:
@@ -263,7 +268,7 @@ func cacheWriteKindName(kind cacheWriteKind) string {
 	}
 }
 
-// logCacheWriteDrop 使用节流方式记录丢弃情况，并汇总丢弃数量。
+// logCacheWriteDrop 浣跨敤鑺傛祦鏂瑰紡璁板綍涓㈠純鎯呭喌锛屽苟姹囨€讳涪寮冩暟閲忋€?
 func (s *BillingCacheService) logCacheWriteDrop(task cacheWriteTask, reason string) {
 	var (
 		countPtr *uint64
@@ -304,23 +309,23 @@ func (s *BillingCacheService) logCacheWriteDrop(task cacheWriteTask, reason stri
 }
 
 // ============================================
-// 余额缓存方法
+// 浣欓缂撳瓨鏂规硶
 // ============================================
 
-// GetUserBalance 获取用户余额（优先从缓存读取）
+// GetUserBalance 鑾峰彇鐢ㄦ埛浣欓锛堜紭鍏堜粠缂撳瓨璇诲彇锛?
 func (s *BillingCacheService) GetUserBalance(ctx context.Context, userID int64) (float64, error) {
 	if s.cache == nil {
-		// Redis不可用，直接查询数据库
+		// Redis涓嶅彲鐢紝鐩存帴鏌ヨ鏁版嵁搴?
 		return s.getUserBalanceFromDB(ctx, userID)
 	}
 
-	// 尝试从缓存读取
+	// 灏濊瘯浠庣紦瀛樿鍙?
 	balance, err := s.cache.GetUserBalance(ctx, userID)
 	if err == nil {
 		return balance, nil
 	}
 
-	// 缓存未命中：singleflight 合并同一 userID 的并发回源请求。
+	// 缂撳瓨鏈懡涓細singleflight 鍚堝苟鍚屼竴 userID 鐨勫苟鍙戝洖婧愯姹傘€?
 	value, err, _ := s.balanceLoadSF.Do(strconv.FormatInt(userID, 10), func() (any, error) {
 		loadCtx, cancel := context.WithTimeout(context.Background(), balanceLoadTimeout)
 		defer cancel()
@@ -330,7 +335,7 @@ func (s *BillingCacheService) GetUserBalance(ctx context.Context, userID int64) 
 			return nil, err
 		}
 
-		// 异步建立缓存
+		// 寮傛寤虹珛缂撳瓨
 		_ = s.enqueueCacheWrite(cacheWriteTask{
 			kind:    cacheWriteSetBalance,
 			userID:  userID,
@@ -348,7 +353,7 @@ func (s *BillingCacheService) GetUserBalance(ctx context.Context, userID int64) 
 	return balance, nil
 }
 
-// getUserBalanceFromDB 从数据库获取用户余额
+// getUserBalanceFromDB 浠庢暟鎹簱鑾峰彇鐢ㄦ埛浣欓
 func (s *BillingCacheService) getUserBalanceFromDB(ctx context.Context, userID int64) (float64, error) {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
@@ -357,7 +362,7 @@ func (s *BillingCacheService) getUserBalanceFromDB(ctx context.Context, userID i
 	return user.Balance, nil
 }
 
-// setBalanceCache 设置余额缓存
+// setBalanceCache 璁剧疆浣欓缂撳瓨
 func (s *BillingCacheService) setBalanceCache(ctx context.Context, userID int64, balance float64) {
 	if s.cache == nil {
 		return
@@ -367,7 +372,7 @@ func (s *BillingCacheService) setBalanceCache(ctx context.Context, userID int64,
 	}
 }
 
-// DeductBalanceCache 扣减余额缓存（同步调用）
+// DeductBalanceCache 鎵ｅ噺浣欓缂撳瓨锛堝悓姝ヨ皟鐢級
 func (s *BillingCacheService) DeductBalanceCache(ctx context.Context, userID int64, amount float64) error {
 	if s.cache == nil {
 		return nil
@@ -375,12 +380,12 @@ func (s *BillingCacheService) DeductBalanceCache(ctx context.Context, userID int
 	return s.cache.DeductUserBalance(ctx, userID, amount)
 }
 
-// QueueDeductBalance 异步扣减余额缓存
+// QueueDeductBalance 寮傛鎵ｅ噺浣欓缂撳瓨
 func (s *BillingCacheService) QueueDeductBalance(userID int64, amount float64) {
 	if s.cache == nil {
 		return
 	}
-	// 队列满时同步回退，避免关键扣减被静默丢弃。
+	// 闃熷垪婊℃椂鍚屾鍥為€€锛岄伩鍏嶅叧閿墸鍑忚闈欓粯涓㈠純銆?
 	if s.enqueueCacheWrite(cacheWriteTask{
 		kind:   cacheWriteDeductBalance,
 		userID: userID,
@@ -395,7 +400,7 @@ func (s *BillingCacheService) QueueDeductBalance(userID int64, amount float64) {
 	}
 }
 
-// InvalidateUserBalance 失效用户余额缓存
+// InvalidateUserBalance 澶辨晥鐢ㄦ埛浣欓缂撳瓨
 func (s *BillingCacheService) InvalidateUserBalance(ctx context.Context, userID int64) error {
 	if s.cache == nil {
 		return nil
@@ -408,28 +413,28 @@ func (s *BillingCacheService) InvalidateUserBalance(ctx context.Context, userID 
 }
 
 // ============================================
-// 订阅缓存方法
+// 璁㈤槄缂撳瓨鏂规硶
 // ============================================
 
-// GetSubscriptionStatus 获取订阅状态（优先从缓存读取）
+// GetSubscriptionStatus 鑾峰彇璁㈤槄鐘舵€侊紙浼樺厛浠庣紦瀛樿鍙栵級
 func (s *BillingCacheService) GetSubscriptionStatus(ctx context.Context, userID, groupID int64) (*subscriptionCacheData, error) {
 	if s.cache == nil {
 		return s.getSubscriptionFromDB(ctx, userID, groupID)
 	}
 
-	// 尝试从缓存读取
+	// 灏濊瘯浠庣紦瀛樿鍙?
 	cacheData, err := s.cache.GetSubscriptionCache(ctx, userID, groupID)
 	if err == nil && cacheData != nil {
 		return s.convertFromPortsData(cacheData), nil
 	}
 
-	// 缓存未命中，从数据库读取
+	// 缂撳瓨鏈懡涓紝浠庢暟鎹簱璇诲彇
 	data, err := s.getSubscriptionFromDB(ctx, userID, groupID)
 	if err != nil {
 		return nil, err
 	}
 
-	// 异步建立缓存
+	// 寮傛寤虹珛缂撳瓨
 	_ = s.enqueueCacheWrite(cacheWriteTask{
 		kind:             cacheWriteSetSubscription,
 		userID:           userID,
@@ -462,7 +467,7 @@ func (s *BillingCacheService) convertToPortsData(data *subscriptionCacheData) *S
 	}
 }
 
-// getSubscriptionFromDB 从数据库获取订阅数据
+// getSubscriptionFromDB 浠庢暟鎹簱鑾峰彇璁㈤槄鏁版嵁
 func (s *BillingCacheService) getSubscriptionFromDB(ctx context.Context, userID, groupID int64) (*subscriptionCacheData, error) {
 	sub, err := s.subRepo.GetActiveByUserIDAndGroupID(ctx, userID, groupID)
 	if err != nil {
@@ -479,7 +484,7 @@ func (s *BillingCacheService) getSubscriptionFromDB(ctx context.Context, userID,
 	}, nil
 }
 
-// setSubscriptionCache 设置订阅缓存
+// setSubscriptionCache 璁剧疆璁㈤槄缂撳瓨
 func (s *BillingCacheService) setSubscriptionCache(ctx context.Context, userID, groupID int64, data *subscriptionCacheData) {
 	if s.cache == nil || data == nil {
 		return
@@ -489,7 +494,7 @@ func (s *BillingCacheService) setSubscriptionCache(ctx context.Context, userID, 
 	}
 }
 
-// UpdateSubscriptionUsage 更新订阅用量缓存（同步调用）
+// UpdateSubscriptionUsage 鏇存柊璁㈤槄鐢ㄩ噺缂撳瓨锛堝悓姝ヨ皟鐢級
 func (s *BillingCacheService) UpdateSubscriptionUsage(ctx context.Context, userID, groupID int64, costUSD float64) error {
 	if s.cache == nil {
 		return nil
@@ -497,12 +502,12 @@ func (s *BillingCacheService) UpdateSubscriptionUsage(ctx context.Context, userI
 	return s.cache.UpdateSubscriptionUsage(ctx, userID, groupID, costUSD)
 }
 
-// QueueUpdateSubscriptionUsage 异步更新订阅用量缓存
+// QueueUpdateSubscriptionUsage 寮傛鏇存柊璁㈤槄鐢ㄩ噺缂撳瓨
 func (s *BillingCacheService) QueueUpdateSubscriptionUsage(userID, groupID int64, costUSD float64) {
 	if s.cache == nil {
 		return
 	}
-	// 队列满时同步回退，确保订阅用量及时更新。
+	// 闃熷垪婊℃椂鍚屾鍥為€€锛岀‘淇濊闃呯敤閲忓強鏃舵洿鏂般€?
 	if s.enqueueCacheWrite(cacheWriteTask{
 		kind:    cacheWriteUpdateSubscriptionUsage,
 		userID:  userID,
@@ -518,7 +523,7 @@ func (s *BillingCacheService) QueueUpdateSubscriptionUsage(userID, groupID int64
 	}
 }
 
-// InvalidateSubscription 失效指定订阅缓存
+// InvalidateSubscription 澶辨晥鎸囧畾璁㈤槄缂撳瓨
 func (s *BillingCacheService) InvalidateSubscription(ctx context.Context, userID, groupID int64) error {
 	if s.cache == nil {
 		return nil
@@ -565,8 +570,7 @@ func (s *BillingCacheService) InvalidateAPIKeyRateLimit(ctx context.Context, key
 }
 
 // ============================================
-// API Key 限速缓存方法
-// ============================================
+// API Key 闄愰€熺紦瀛樻柟娉?// ============================================
 
 // checkAPIKeyRateLimits checks rate limit windows for an API key.
 // It loads usage from Redis cache (falling back to DB on cache miss),
@@ -699,13 +703,9 @@ func (s *BillingCacheService) QueueUpdateAPIKeyRateLimitUsage(apiKeyID int64, co
 	})
 }
 
-// IncrementUserPlatformQuotaUsage 同步累加 user × platform usage 到 Redis 缓存。
-//
-// 设计：同步写入而非异步入队。同步写确保下次 preflight 立即看到最新 usage，
-// 把 TOCTOU 超支窗口限制在并发 in-flight 请求数量内（而非随时间无限累积）。
-// 写延迟通常 < 1ms（本地 Redis），换取 quota 视图实时性的取舍合理。
-//
-// Redis 写失败用 ALERT 级 log；DB 持久化由 caller 单独 goroutine 兜底（gateway_service.go）。
+// IncrementUserPlatformQuotaUsage 鍚屾绱姞 user 脳 platform usage 鍒?Redis 缂撳瓨銆?//
+// 璁捐锛氬悓姝ュ啓鍏ヨ€岄潪寮傛鍏ラ槦銆傚悓姝ュ啓纭繚涓嬫 preflight 绔嬪嵆鐪嬪埌鏈€鏂?usage锛?// 鎶?TOCTOU 瓒呮敮绐楀彛闄愬埗鍦ㄥ苟鍙?in-flight 璇锋眰鏁伴噺鍐咃紙鑰岄潪闅忔椂闂存棤闄愮疮绉級銆?// 鍐欏欢杩熼€氬父 < 1ms锛堟湰鍦?Redis锛夛紝鎹㈠彇 quota 瑙嗗浘瀹炴椂鎬х殑鍙栬垗鍚堢悊銆?//
+// Redis 鍐欏け璐ョ敤 ALERT 绾?log锛汥B 鎸佷箙鍖栫敱 caller 鍗曠嫭 goroutine 鍏滃簳锛坓ateway_service.go锛夈€?
 func (s *BillingCacheService) IncrementUserPlatformQuotaUsage(userID int64, platform string, cost float64) {
 	if s.cache == nil {
 		return
@@ -725,15 +725,18 @@ func (s *BillingCacheService) IncrementUserPlatformQuotaUsage(userID int64, plat
 }
 
 // ============================================
-// 统一检查方法
-// ============================================
+// 缁熶竴妫€鏌ユ柟娉?// ============================================
 
-// CheckBillingEligibility 检查用户是否有资格发起请求
-// 余额模式：检查缓存余额 > 0
-// 订阅模式：检查缓存用量未超过限额（Group限额从参数传入）
-// platform 为请求的目标平台（如 "anthropic"），传空串 "" 时跳过 user × platform quota 检查。
+// CheckBillingEligibility 妫€鏌ョ敤鎴锋槸鍚︽湁璧勬牸鍙戣捣璇锋眰
+// 浣欓妯″紡锛氭鏌ョ紦瀛樹綑棰?> 0
+// 璁㈤槄妯″紡锛氭鏌ョ紦瀛樼敤閲忔湭瓒呰繃闄愰锛圙roup闄愰浠庡弬鏁颁紶鍏ワ級
+// platform 涓鸿姹傜殑鐩爣骞冲彴锛堝 "anthropic"锛夛紝浼犵┖涓?"" 鏃惰烦杩?user 脳 platform quota 妫€鏌ャ€?
 func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user *User, apiKey *APIKey, group *Group, subscription *UserSubscription, platform string) error {
-	// 简易模式：跳过所有计费检查
+	requestedModel, _ := RequestedModelFromContext(ctx)
+	if err := s.checkUserTokenQuotaEligibility(ctx, user, requestedModel); err != nil {
+		return err
+	}
+	// 绠€鏄撴ā寮忥細璺宠繃鎵€鏈夎璐规鏌?
 	if s.cfg.RunMode == config.RunModeSimple {
 		return nil
 	}
@@ -741,7 +744,7 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 		return ErrBillingServiceUnavailable
 	}
 
-	// 判断计费模式
+	// 鍒ゆ柇璁¤垂妯″紡
 	isSubscriptionMode := group != nil && group.IsSubscriptionType() && subscription != nil
 
 	if isSubscriptionMode {
@@ -754,7 +757,7 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 		}
 	}
 
-	// user × platform quota 仅在 standard（余额）模式生效；订阅模式豁免
+	// user 脳 platform quota 浠呭湪 standard锛堜綑棰濓級妯″紡鐢熸晥锛涜闃呮ā寮忚眮鍏?
 	if !isSubscriptionMode {
 		if err := s.checkUserPlatformQuotaEligibility(ctx, user.ID, platform); err != nil {
 			return err
@@ -768,7 +771,7 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 		}
 	}
 
-	// RPM 限流：级联回落（Override → Group → User），放在最后以避免为注定失败的请求增加计数。
+	// RPM 闄愭祦锛氱骇鑱斿洖钀斤紙Override 鈫?Group 鈫?User锛夛紝鏀惧湪鏈€鍚庝互閬垮厤涓烘敞瀹氬け璐ョ殑璇锋眰澧炲姞璁℃暟銆?
 	if err := s.checkRPM(ctx, user, group); err != nil {
 		return err
 	}
@@ -776,23 +779,103 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 	return nil
 }
 
-// checkRPM 执行并行 RPM 限流，所有适用的限制同时生效，任一超限即拒绝：
+func (s *BillingCacheService) checkUserTokenQuotaEligibility(ctx context.Context, user *User, requestedModel string) error {
+	if s == nil || user == nil || !user.HasTokenLimit() || !isUserTokenQuotaModel(requestedModel) {
+		return nil
+	}
+	if s.usageLogRepo == nil {
+		return ErrBillingServiceUnavailable
+	}
+
+	now := time.Now().UTC()
+	quotaDayStartedAt := timezone.StartOfQuotaDay(now)
+	var usage *UserTokenUsage
+	if cache, ok := s.cache.(UserTokenUsageCache); ok {
+		cached, hit, err := cache.GetUserTokenUsageCache(ctx, user.ID, user.TokenQuotaStartedAt, quotaDayStartedAt)
+		if err == nil && hit && cached != nil {
+			usage = cached
+		} else if err != nil {
+			logger.LegacyPrintf("service.billing_cache", "Warning: user token usage cache read failed user=%d: %v", user.ID, err)
+		}
+	}
+
+	if usage == nil {
+		key := strconv.FormatInt(user.ID, 10) + ":" +
+			strconv.FormatInt(user.TokenQuotaStartedAt.UnixNano(), 10) + ":" +
+			strconv.FormatInt(quotaDayStartedAt.UnixNano(), 10)
+		value, err, _ := s.tokenQuotaLoadSF.Do(key, func() (any, error) {
+			loadCtx, cancel := context.WithTimeout(context.Background(), userTokenUsageLoadTimeout)
+			defer cancel()
+			return s.usageLogRepo.GetUserTokenUsage(loadCtx, user.ID, now, user.TokenQuotaStartedAt)
+		})
+		if err != nil {
+			logger.LegacyPrintf("service.billing_cache", "ALERT: user token usage load failed user=%d: %v", user.ID, err)
+			return ErrBillingServiceUnavailable.WithCause(err)
+		}
+		var ok bool
+		usage, ok = value.(*UserTokenUsage)
+		if !ok || usage == nil {
+			return ErrBillingServiceUnavailable.WithCause(fmt.Errorf("unexpected user token usage type: %T", value))
+		}
+		if cache, ok := s.cache.(UserTokenUsageCache); ok {
+			if err := cache.SetUserTokenUsageCache(ctx, user.ID, user.TokenQuotaStartedAt, quotaDayStartedAt, usage, userTokenUsageCacheTTL); err != nil {
+				logger.LegacyPrintf("service.billing_cache", "Warning: user token usage cache write failed user=%d: %v", user.ID, err)
+			}
+		}
+	}
+
+	if user.TokenLimit1d > 0 && usage.Usage1d >= user.TokenLimit1d {
+		return ErrUserToken1dQuotaExhausted
+	}
+	if user.TokenLimit7d > 0 && usage.Usage7d >= user.TokenLimit7d {
+		return ErrUserToken7dQuotaExhausted
+	}
+	if user.TokenLimit30d > 0 && usage.Usage30d >= user.TokenLimit30d {
+		return ErrUserToken30dQuotaExhausted
+	}
+	return nil
+}
+
+// IncrementUserTokenUsage updates an existing short-lived usage cache after a
+// successfully persisted usage record. Cache misses are intentionally ignored;
+// the next preflight rebuilds an exact rolling total from usage_logs.
+func (s *BillingCacheService) IncrementUserTokenUsage(userID int64, quotaStartedAt time.Time, requestedModel string, tokens int64) {
+	if s == nil || userID <= 0 || tokens <= 0 || !isUserTokenQuotaModel(requestedModel) {
+		return
+	}
+	cache, ok := s.cache.(UserTokenUsageCache)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), cacheWriteTimeout)
+	defer cancel()
+	quotaDayStartedAt := timezone.StartOfQuotaDay(time.Now())
+	if err := cache.IncrementUserTokenUsageCache(ctx, userID, quotaStartedAt, quotaDayStartedAt, tokens); err != nil {
+		logger.LegacyPrintf("service.billing_cache", "Warning: increment user token usage cache failed user=%d tokens=%d: %v", userID, tokens, err)
+	}
+}
+
+func isUserTokenQuotaModel(model string) bool {
+	model = strings.ToLower(strings.TrimSpace(model))
+	if slash := strings.LastIndex(model, "/"); slash >= 0 {
+		model = strings.TrimSpace(model[slash+1:])
+	}
+	return strings.HasPrefix(model, "gpt-")
+}
+
+// checkRPM 鎵ц骞惰 RPM 闄愭祦锛屾墍鏈夐€傜敤鐨勯檺鍒跺悓鏃剁敓鏁堬紝浠讳竴瓒呴檺鍗虫嫆缁濓細
 //
-//  1. (用户, 分组) rpm_override       — 最细粒度：管理员为特定用户在特定分组设定的专属限额。
-//     override=0 表示该用户在该分组免检（绿灯），但 user 级全局上限仍然生效。
-//  2. group.rpm_limit                 — 分组级：该分组的统一 RPM 容量（仅当无 override 时生效）。
-//  3. user.rpm_limit                  — 用户级全局硬上限：无论 override/group 如何配置，始终生效。
+//  1. (鐢ㄦ埛, 鍒嗙粍) rpm_override       鈥?鏈€缁嗙矑搴︼細绠＄悊鍛樹负鐗瑰畾鐢ㄦ埛鍦ㄧ壒瀹氬垎缁勮瀹氱殑涓撳睘闄愰銆?//     override=0 琛ㄧず璇ョ敤鎴峰湪璇ュ垎缁勫厤妫€锛堢豢鐏級锛屼絾 user 绾у叏灞€涓婇檺浠嶇劧鐢熸晥銆?//  2. group.rpm_limit                 鈥?鍒嗙粍绾э細璇ュ垎缁勭殑缁熶竴 RPM 瀹归噺锛堜粎褰撴棤 override 鏃剁敓鏁堬級銆?//  3. user.rpm_limit                  鈥?鐢ㄦ埛绾у叏灞€纭笂闄愶細鏃犺 override/group 濡備綍閰嶇疆锛屽缁堢敓鏁堛€?//
 //
-// 与旧版"级联互斥"设计不同，新版确保 user.rpm_limit 作为全局天花板不会被 group 或 override 覆盖。
-// Redis 故障一律 fail-open（打 warning，不阻塞业务）。
+// 涓庢棫鐗?绾ц仈浜掓枼"璁捐涓嶅悓锛屾柊鐗堢‘淇?user.rpm_limit 浣滀负鍏ㄥ眬澶╄姳鏉夸笉浼氳 group 鎴?override 瑕嗙洊銆?// Redis 鏁呴殰涓€寰?fail-open锛堟墦 warning锛屼笉闃诲涓氬姟锛夈€?
 func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *Group) error {
 	if s == nil || s.userRPMCache == nil || user == nil {
 		return nil
 	}
 
-	// ── 第一层：分组级检查（override 或 group.rpm_limit） ──
+	// 鈹€鈹€ 绗竴灞傦細鍒嗙粍绾ф鏌ワ紙override 鎴?group.rpm_limit锛?鈹€鈹€
 	if group != nil {
-		// 解析 override：优先从 auth cache snapshot，nil 时回退 DB。
+		// 瑙ｆ瀽 override锛氫紭鍏堜粠 auth cache snapshot锛宯il 鏃跺洖閫€ DB銆?
 		var override *int
 		if user.UserGroupRPMOverride != nil {
 			override = user.UserGroupRPMOverride
@@ -810,7 +893,7 @@ func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *G
 		}
 
 		if override != nil {
-			// override=0 → 该用户在该分组免检（但 user 级仍会在下面检查）。
+			// override=0 鈫?璇ョ敤鎴峰湪璇ュ垎缁勫厤妫€锛堜絾 user 绾т粛浼氬湪涓嬮潰妫€鏌ワ級銆?
 			if *override > 0 {
 				count, incErr := s.userRPMCache.IncrementUserGroupRPM(ctx, user.ID, group.ID)
 				if incErr != nil {
@@ -824,9 +907,9 @@ func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *G
 					return ErrGroupRPMExceeded
 				}
 			}
-			// override 命中后跳过 group.rpm_limit（override 替代 group），但不 return——继续检查 user 级。
+			// override 鍛戒腑鍚庤烦杩?group.rpm_limit锛坥verride 鏇夸唬 group锛夛紝浣嗕笉 return鈥斺€旂户缁鏌?user 绾с€?
 		} else if group.RPMLimit > 0 {
-			// 无 override，检查 group.rpm_limit。
+			// 鏃?override锛屾鏌?group.rpm_limit銆?
 			count, err := s.userRPMCache.IncrementUserGroupRPM(ctx, user.ID, group.ID)
 			if err != nil {
 				logger.LegacyPrintf(
@@ -841,7 +924,7 @@ func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *G
 		}
 	}
 
-	// ── 第二层：用户级全局硬上限（始终生效） ──
+	// 鈹€鈹€ 绗簩灞傦細鐢ㄦ埛绾у叏灞€纭笂闄愶紙濮嬬粓鐢熸晥锛?鈹€鈹€
 	if user.RPMLimit > 0 {
 		count, err := s.userRPMCache.IncrementUserRPM(ctx, user.ID)
 		if err != nil {
@@ -875,7 +958,7 @@ func (s *BillingCacheService) balanceBelowEligibilityThreshold(balance float64) 
 	return minimumReserve > 0 && balance < minimumReserve
 }
 
-// checkBalanceEligibility 检查余额模式资格
+// checkBalanceEligibility 妫€鏌ヤ綑棰濇ā寮忚祫鏍?
 func (s *BillingCacheService) checkBalanceEligibility(ctx context.Context, userID int64) error {
 	balance, err := s.GetUserBalance(ctx, userID)
 	if err != nil {
@@ -896,9 +979,9 @@ func (s *BillingCacheService) checkBalanceEligibility(ctx context.Context, userI
 	return nil
 }
 
-// checkSubscriptionEligibility 检查订阅模式资格
+// checkSubscriptionEligibility 妫€鏌ヨ闃呮ā寮忚祫鏍?
 func (s *BillingCacheService) checkSubscriptionEligibility(ctx context.Context, userID int64, group *Group, subscription *UserSubscription) error {
-	// 获取订阅缓存数据
+	// 鑾峰彇璁㈤槄缂撳瓨鏁版嵁
 	subData, err := s.GetSubscriptionStatus(ctx, userID, group.ID)
 	if err != nil {
 		if s.circuitBreaker != nil {
@@ -911,17 +994,17 @@ func (s *BillingCacheService) checkSubscriptionEligibility(ctx context.Context, 
 		s.circuitBreaker.OnSuccess()
 	}
 
-	// 检查订阅状态
+	// 妫€鏌ヨ闃呯姸鎬?
 	if subData.Status != SubscriptionStatusActive {
 		return ErrSubscriptionInvalid
 	}
 
-	// 检查是否过期
+	// 妫€鏌ユ槸鍚﹁繃鏈?
 	if time.Now().After(subData.ExpiresAt) {
 		return ErrSubscriptionInvalid
 	}
 
-	// 检查限额（使用传入的Group限额配置）
+	// 妫€鏌ラ檺棰濓紙浣跨敤浼犲叆鐨凣roup闄愰閰嶇疆锛?
 	if group.HasDailyLimit() && subData.DailyUsage >= *group.DailyLimitUSD {
 		return ErrDailyLimitExceeded
 	}
@@ -1047,7 +1130,7 @@ func (b *billingCircuitBreaker) OnSuccess() {
 	b.failures = 0
 	b.halfOpenRemaining = 0
 
-	// 只有状态真正发生变化时才记录日志
+	// 鍙湁鐘舵€佺湡姝ｅ彂鐢熷彉鍖栨椂鎵嶈褰曟棩蹇?
 	if previousState != billingCircuitClosed {
 		logger.LegacyPrintf("service.billing_cache", "ALERT: billing circuit breaker closed (was %s)", circuitStateString(previousState))
 	} else if previousFailures > 0 {
@@ -1068,15 +1151,10 @@ func circuitStateString(state billingCircuitBreakerState) string {
 	}
 }
 
-// checkUserPlatformQuotaEligibility 在 standard 模式下检查 user × platform 日/周/月 quota。
-// 返回 nil = 允许；返回 ErrUserPlatform{Daily/Weekly/Monthly}QuotaExhausted = 拒绝（带 window_resets_at metadata）。
-// checkUserPlatformQuotaEligibility 检查用户在指定平台的 USD 配额。
-//
-// 流程（Redis-first / DB-fallback）：
-//  1. 先读 Redis cache；若命中且 SchemaVersion==1，直接用 entry 中的 limits 和 window_start 做校验，
-//     免除 DB 查询。
-//  2. cache MISS 或旧版 entry（SchemaVersion==0）→ 查 DB 回填完整 entry（含 limits/window_start）。
-//  3. Redis 故障（err != nil）→ fail-open，查 DB 做一次性检查，不回填。
+// checkUserPlatformQuotaEligibility 鍦?standard 妯″紡涓嬫鏌?user 脳 platform 鏃?鍛?鏈?quota銆?// 杩斿洖 nil = 鍏佽锛涜繑鍥?ErrUserPlatform{Daily/Weekly/Monthly}QuotaExhausted = 鎷掔粷锛堝甫 window_resets_at metadata锛夈€?// checkUserPlatformQuotaEligibility 妫€鏌ョ敤鎴峰湪鎸囧畾骞冲彴鐨?USD 閰嶉銆?//
+// 娴佺▼锛圧edis-first / DB-fallback锛夛細
+//  1. 鍏堣 Redis cache锛涜嫢鍛戒腑涓?SchemaVersion==1锛岀洿鎺ョ敤 entry 涓殑 limits 鍜?window_start 鍋氭牎楠岋紝
+//     鍏嶉櫎 DB 鏌ヨ銆?//  2. cache MISS 鎴栨棫鐗?entry锛圫chemaVersion==0锛夆啋 鏌?DB 鍥炲～瀹屾暣 entry锛堝惈 limits/window_start锛夈€?//  3. Redis 鏁呴殰锛坋rr != nil锛夆啋 fail-open锛屾煡 DB 鍋氫竴娆℃€ф鏌ワ紝涓嶅洖濉€?
 func (s *BillingCacheService) checkUserPlatformQuotaEligibility(
 	ctx context.Context,
 	userID int64,
@@ -1086,8 +1164,8 @@ func (s *BillingCacheService) checkUserPlatformQuotaEligibility(
 		return nil
 	}
 
-	// cache 未配置（如简化部署 / 单测路径）→ 直接走 DB 查询，避免 nil panic。
-	// 其他 check* 方法（balance/subscription/rate-limit）也有类似守卫。
+	// cache 鏈厤缃紙濡傜畝鍖栭儴缃?/ 鍗曟祴璺緞锛夆啋 鐩存帴璧?DB 鏌ヨ锛岄伩鍏?nil panic銆?
+	// 鍏朵粬 check* 鏂规硶锛坆alance/subscription/rate-limit锛変篃鏈夌被浼煎畧鍗€?
 	var (
 		entry    *UserPlatformQuotaCacheEntry
 		ok       bool
@@ -1096,34 +1174,32 @@ func (s *BillingCacheService) checkUserPlatformQuotaEligibility(
 	if s.cache != nil {
 		entry, ok, cacheErr = s.cache.GetUserPlatformQuotaCache(ctx, userID, platform)
 	} else {
-		// 标记为"cache 故障"分支：跳过 HIT 路径、不回填、走 DB 一次性检查
-		cacheErr = errBillingCacheUnavailable
+		// 鏍囪涓?cache 鏁呴殰"鍒嗘敮锛氳烦杩?HIT 璺緞銆佷笉鍥炲～銆佽蛋 DB 涓€娆℃€ф鏌?		cacheErr = errBillingCacheUnavailable
 	}
 
-	// --- cache HIT with current schema → 直接用 entry，不查 DB ---
+	// --- cache HIT with current schema 鈫?鐩存帴鐢?entry锛屼笉鏌?DB ---
 	if cacheErr == nil && ok && entry != nil && entry.SchemaVersion == UserPlatformQuotaCacheSchemaV1 {
 		now := time.Now()
 		dailyUsage := entry.DailyUsageUSD
 		weeklyUsage := entry.WeeklyUsageUSD
 		monthlyUsage := entry.MonthlyUsageUSD
-		// 若窗口已更新（DB 已重置但 cache 尚未失效）,将对应 usage 清零再做比较,
-		// 同时记录新窗口起点用于后续刷新 cache entry。
-		// 本次请求用本地清零值继续判断;DB 层 IncrementUsageWithReset 已有窗口自愈能力,
-		// 持久化数据始终正确。
+		// 鑻ョ獥鍙ｅ凡鏇存柊锛圖B 宸查噸缃絾 cache 灏氭湭澶辨晥锛?灏嗗搴?usage 娓呴浂鍐嶅仛姣旇緝,
+		// 鍚屾椂璁板綍鏂扮獥鍙ｈ捣鐐圭敤浜庡悗缁埛鏂?cache entry銆?		// 鏈璇锋眰鐢ㄦ湰鍦版竻闆跺€肩户缁垽鏂?DB 灞?IncrementUsageWithReset 宸叉湁绐楀彛鑷剤鑳藉姏,
+		// 鎸佷箙鍖栨暟鎹缁堟纭€?
 		windowExpired := false
 		newDailyStart := entry.DailyWindowStart
 		newWeeklyStart := entry.WeeklyWindowStart
 		newMonthlyStart := entry.MonthlyWindowStart
-		if quotaWindowExpired(entry.DailyWindowStart, timezone.StartOfDay(now)) {
+		if quotaWindowExpired(entry.DailyWindowStart, timezone.StartOfQuotaDay(now)) {
 			dailyUsage = 0
 			windowExpired = true
-			dayStart := timezone.StartOfDay(now)
+			dayStart := timezone.StartOfQuotaDay(now)
 			newDailyStart = &dayStart
 		}
-		if quotaWindowExpired(entry.WeeklyWindowStart, timezone.StartOfWeek(now)) {
+		if quotaWindowExpired(entry.WeeklyWindowStart, timezone.StartOfQuotaWeek(now)) {
 			weeklyUsage = 0
 			windowExpired = true
-			weekStart := timezone.StartOfWeek(now)
+			weekStart := timezone.StartOfQuotaWeek(now)
 			newWeeklyStart = &weekStart
 		}
 		if monthlyQuotaWindowExpired(entry.MonthlyWindowStart, now) {
@@ -1132,17 +1208,11 @@ func (s *BillingCacheService) checkUserPlatformQuotaEligibility(
 			monthStart := now
 			newMonthlyStart = &monthStart
 		}
-		// 检测到任意窗口过期：用 reset 后的 entry 覆盖 Redis（而非 Delete）。
-		// 旧实现 Delete 后,期间到达的 IncrUserPlatformQuotaUsage 调用让 Lua 看到
-		// EXISTS=0 直接 return 0,并发请求的 cost 永久丢失,直到下次 cache MISS 回填。
-		// 改为 SetCache 原子覆盖:key 不断链,Lua INCR 可在新窗口 entry 上正确累加。
-		// 超时 50ms:覆盖正常路径与可接受抖动;Redis 异常时 hot path 不阻塞超过此值。
-		// 用 context.Background()+短超时,避免请求 ctx 取消导致刷新丢失。
-		// 显式 setCancel()(而非 defer):缩短 context 生命周期,避免 defer 延迟到函数返回。
-		// isSentinel 判定「该 entry 无任何 limit」,涵盖两类,跨窗口命中时都跳过 refresh:
-		//   1) A3 回填的 sentinel(DB 无行,短 TTL):refresh 会把短 TTL 误升级为 86400s,有害;
-		//   2) DB 有行但三 limit 全未配置的用户(TTL 86400s):refresh 纯属无意义(TTL 升级本身无害)。
-		// 两类的 enforcement(下方 limit!=nil 比较)都因 limit 全 nil 永远放行,跳过 refresh 均正确。
+		// 妫€娴嬪埌浠绘剰绐楀彛杩囨湡锛氱敤 reset 鍚庣殑 entry 瑕嗙洊 Redis锛堣€岄潪 Delete锛夈€?		// 鏃у疄鐜?Delete 鍚?鏈熼棿鍒拌揪鐨?IncrUserPlatformQuotaUsage 璋冪敤璁?Lua 鐪嬪埌
+		// EXISTS=0 鐩存帴 return 0,骞跺彂璇锋眰鐨?cost 姘镐箙涓㈠け,鐩村埌涓嬫 cache MISS 鍥炲～銆?		// 鏀逛负 SetCache 鍘熷瓙瑕嗙洊:key 涓嶆柇閾?Lua INCR 鍙湪鏂扮獥鍙?entry 涓婃纭疮鍔犮€?		// 瓒呮椂 50ms:瑕嗙洊姝ｅ父璺緞涓庡彲鎺ュ彈鎶栧姩;Redis 寮傚父鏃?hot path 涓嶉樆濉炶秴杩囨鍊笺€?		// 鐢?context.Background()+鐭秴鏃?閬垮厤璇锋眰 ctx 鍙栨秷瀵艰嚧鍒锋柊涓㈠け銆?		// 鏄惧紡 setCancel()(鑰岄潪 defer):缂╃煭 context 鐢熷懡鍛ㄦ湡,閬垮厤 defer 寤惰繜鍒板嚱鏁拌繑鍥炪€?		// isSentinel 鍒ゅ畾銆岃 entry 鏃犱换浣?limit銆?娑电洊涓ょ被,璺ㄧ獥鍙ｅ懡涓椂閮借烦杩?refresh:
+		//   1) A3 鍥炲～鐨?sentinel(DB 鏃犺,鐭?TTL):refresh 浼氭妸鐭?TTL 璇崌绾т负 86400s,鏈夊;
+		//   2) DB 鏈夎浣嗕笁 limit 鍏ㄦ湭閰嶇疆鐨勭敤鎴?TTL 86400s):refresh 绾睘鏃犳剰涔?TTL 鍗囩骇鏈韩鏃犲)銆?
+		// 涓ょ被鐨?enforcement(涓嬫柟 limit!=nil 姣旇緝)閮藉洜 limit 鍏?nil 姘歌繙鏀捐,璺宠繃 refresh 鍧囨纭€?
 		isSentinel := entry.DailyLimitUSD == nil && entry.WeeklyLimitUSD == nil && entry.MonthlyLimitUSD == nil
 		if windowExpired && s.cache != nil && !isSentinel {
 			refreshed := &UserPlatformQuotaCacheEntry{
@@ -1178,13 +1248,12 @@ func (s *BillingCacheService) checkUserPlatformQuotaEligibility(
 		return nil
 	}
 
-	// --- cache MISS、旧版 entry 或 Redis 故障 → 查 DB（singleflight 合并并发回源）---
-	// 使用 DoChan 而非 Do：avoid sharing the first caller's ctx among all dedupe followers.
-	// 若第一个 caller 的 ctx 被取消（客户端断连），后续 caller 不受影响，仍由各自 ctx 控制超时。
+	// --- cache MISS銆佹棫鐗?entry 鎴?Redis 鏁呴殰 鈫?鏌?DB锛坰ingleflight 鍚堝苟骞跺彂鍥炴簮锛?--
+	// 浣跨敤 DoChan 鑰岄潪 Do锛歛void sharing the first caller's ctx among all dedupe followers.
+	// 鑻ョ涓€涓?caller 鐨?ctx 琚彇娑堬紙瀹㈡埛绔柇杩烇級锛屽悗缁?caller 涓嶅彈褰卞搷锛屼粛鐢卞悇鑷?ctx 鎺у埗瓒呮椂銆?
 	sfKey := strconv.FormatInt(userID, 10) + ":" + platform
 	ch := s.quotaLoadSF.DoChan(sfKey, func() (any, error) {
-		// 子查询用 detached context + 短超时，独立于任何 caller 的请求 ctx，
-		// 防止"第一个 caller ctx 取消"使所有 follower 一起 fail。
+		// 瀛愭煡璇㈢敤 detached context + 鐭秴鏃讹紝鐙珛浜庝换浣?caller 鐨勮姹?ctx锛?		// 闃叉"绗竴涓?caller ctx 鍙栨秷"浣挎墍鏈?follower 涓€璧?fail銆?
 		bgCtx, bgCancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer bgCancel()
 		return s.userPlatformQuotaRepo.GetByUserPlatform(bgCtx, userID, platform)
@@ -1197,7 +1266,7 @@ func (s *BillingCacheService) checkUserPlatformQuotaEligibility(
 	case res := <-ch:
 		v, dbErr = res.Val, res.Err
 	case <-ctx.Done():
-		// 当前 caller 的 ctx 被取消：fail-open，不阻断 (此请求已无意义)。
+		// 褰撳墠 caller 鐨?ctx 琚彇娑堬細fail-open锛屼笉闃绘柇 (姝よ姹傚凡鏃犳剰涔?銆?
 		logger.LegacyPrintf("service.billing_cache", "Warning: user platform quota check ctx cancelled user=%d platform=%s: %v (fail-open)", userID, platform, ctx.Err())
 		return nil
 	}
@@ -1207,24 +1276,24 @@ func (s *BillingCacheService) checkUserPlatformQuotaEligibility(
 	}
 	rec, _ := v.(*UserPlatformQuotaRecord)
 	if rec == nil {
-		// 仅在 cache 可用且本次 GET 未出错时回填 sentinel:Redis GET 故障(cacheErr!=nil)
-		// 时不回填,与下方 line ~1201 "Redis 故障时 fail-open:不回填" 保持一致,
-		// 避免在 Redis 异常期做一次注定失败的 SET。
+		// 浠呭湪 cache 鍙敤涓旀湰娆?GET 鏈嚭閿欐椂鍥炲～ sentinel:Redis GET 鏁呴殰(cacheErr!=nil)
+		// 鏃朵笉鍥炲～,涓庝笅鏂?line ~1201 "Redis 鏁呴殰鏃?fail-open:涓嶅洖濉? 淇濇寔涓€鑷?
+		// 閬垮厤鍦?Redis 寮傚父鏈熷仛涓€娆℃敞瀹氬け璐ョ殑 SET銆?
 		if s.cache != nil && cacheErr == nil {
 			now := time.Now()
-			startOfDay := timezone.StartOfDay(now)
-			startOfWeek := timezone.StartOfWeek(now)
+			startOfDay := timezone.StartOfQuotaDay(now)
+			startOfWeek := timezone.StartOfQuotaWeek(now)
 			sentinel := &UserPlatformQuotaCacheEntry{
 				SchemaVersion:      UserPlatformQuotaCacheSchemaV1,
 				DailyWindowStart:   &startOfDay,
 				WeeklyWindowStart:  &startOfWeek,
 				MonthlyWindowStart: &now,
-				// limits 全 nil, usage 全 0(零值)
+				// limits 鍏?nil, usage 鍏?0(闆跺€?
 			}
 			sentinelTTL := time.Duration(s.cfg.Billing.UserPlatformQuotaSentinelTTLSeconds) * time.Second
 			if sentinelTTL <= 0 {
-				// 防御:TTL<=0 时 Redis EXPIRE 会立即删除整个 key(见 billing_cache.go 的 pipe.Expire),
-				// sentinel 不持久化 → 每请求击穿 DB。配置缺失/误配为 0 时 fallback 到 1h。
+				// 闃插尽:TTL<=0 鏃?Redis EXPIRE 浼氱珛鍗冲垹闄ゆ暣涓?key(瑙?billing_cache.go 鐨?pipe.Expire),
+				// sentinel 涓嶆寔涔呭寲 鈫?姣忚姹傚嚮绌?DB銆傞厤缃己澶?璇厤涓?0 鏃?fallback 鍒?1h銆?
 				sentinelTTL = time.Hour
 			}
 			setCtx, setCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -1241,17 +1310,17 @@ func (s *BillingCacheService) checkUserPlatformQuotaEligibility(
 	dailyUsage := rec.DailyUsageUSD
 	weeklyUsage := rec.WeeklyUsageUSD
 	monthlyUsage := rec.MonthlyUsageUSD
-	if quotaWindowExpired(rec.DailyWindowStart, timezone.StartOfDay(now)) {
+	if quotaWindowExpired(rec.DailyWindowStart, timezone.StartOfQuotaDay(now)) {
 		dailyUsage = 0
 	}
-	if quotaWindowExpired(rec.WeeklyWindowStart, timezone.StartOfWeek(now)) {
+	if quotaWindowExpired(rec.WeeklyWindowStart, timezone.StartOfQuotaWeek(now)) {
 		weeklyUsage = 0
 	}
 	if monthlyQuotaWindowExpired(rec.MonthlyWindowStart, now) {
 		monthlyUsage = 0
 	}
 
-	// Redis 故障时 fail-open：不回填，直接用 DB 数据做一次性检查
+	// Redis 鏁呴殰鏃?fail-open锛氫笉鍥炲～锛岀洿鎺ョ敤 DB 鏁版嵁鍋氫竴娆℃€ф鏌?
 	if cacheErr != nil {
 		if rec.DailyLimitUSD != nil && dailyUsage >= *rec.DailyLimitUSD {
 			return withWindowResetsMetadata(ErrUserPlatformDailyQuotaExhausted, nextDailyReset(now))
@@ -1265,7 +1334,7 @@ func (s *BillingCacheService) checkUserPlatformQuotaEligibility(
 		return nil
 	}
 
-	// cache MISS 或旧版 entry → 回填完整 entry（含 limits 和 window_start）
+	// cache MISS 鎴栨棫鐗?entry 鈫?鍥炲～瀹屾暣 entry锛堝惈 limits 鍜?window_start锛?
 	newEntry := &UserPlatformQuotaCacheEntry{
 		DailyUsageUSD:      dailyUsage,
 		WeeklyUsageUSD:     weeklyUsage,
@@ -1280,9 +1349,9 @@ func (s *BillingCacheService) checkUserPlatformQuotaEligibility(
 	}
 	if s.cache != nil {
 		ttl := time.Duration(s.cfg.Billing.UserPlatformQuotaCacheTTLSeconds) * time.Second
-		// 与 HIT 过期回填路径（上文 SetCache 调用）保持一致：用 context.Background()+50ms,
-		// 避免请求 ctx 提前取消（客户端断连/上游超时）导致 cache 回填失败,
-		// 让下一次 preflight 仍然 MISS 并击穿到 DB（高并发下增大 DB 压力）。
+		// 涓?HIT 杩囨湡鍥炲～璺緞锛堜笂鏂?SetCache 璋冪敤锛変繚鎸佷竴鑷达細鐢?context.Background()+50ms,
+		// 閬垮厤璇锋眰 ctx 鎻愬墠鍙栨秷锛堝鎴风鏂繛/涓婃父瓒呮椂锛夊鑷?cache 鍥炲～澶辫触,
+		// 璁╀笅涓€娆?preflight 浠嶇劧 MISS 骞跺嚮绌垮埌 DB锛堥珮骞跺彂涓嬪澶?DB 鍘嬪姏锛夈€?
 		setCtx, setCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 		if setErr := s.cache.SetUserPlatformQuotaCache(setCtx, userID, platform, newEntry, ttl); setErr != nil {
 			logger.LegacyPrintf("service.billing_cache", "Warning: set user platform quota cache failed user=%d platform=%s: %v", userID, platform, setErr)
@@ -1302,7 +1371,7 @@ func (s *BillingCacheService) checkUserPlatformQuotaEligibility(
 	return nil
 }
 
-// withWindowResetsMetadata 给 quota error 附加 window_resets_at metadata（RFC3339）。
+// withWindowResetsMetadata 缁?quota error 闄勫姞 window_resets_at metadata锛圧FC3339锛夈€?
 func withWindowResetsMetadata(err error, resetAt time.Time) error {
 	appErr, ok := err.(*infraerrors.ApplicationError)
 	if !ok || appErr == nil {
@@ -1313,22 +1382,17 @@ func withWindowResetsMetadata(err error, resetAt time.Time) error {
 	})
 }
 
-// nextDailyReset 计算下一个日窗口起点（次日全局时区 0 点）。
-// 必须与 timezone.StartOfDay 同口径，否则 Retry-After 会偏差。
+// nextDailyReset 璁＄畻涓嬩竴涓棩绐楀彛璧风偣锛堟鏃ュ叏灞€鏃跺尯 0 鐐癸級銆?// 蹇呴』涓?timezone.StartOfDay 鍚屽彛寰勶紝鍚﹀垯 Retry-After 浼氬亸宸€?
 func nextDailyReset(now time.Time) time.Time {
-	return timezone.StartOfDay(now).AddDate(0, 0, 1)
+	return timezone.StartOfQuotaDay(now).AddDate(0, 0, 1)
 }
 
-// nextWeeklyReset 计算下一个周窗口起点（下周一全局时区 0 点）。
-// 必须与 timezone.StartOfWeek 同口径，否则 Retry-After 会偏差。
+// nextWeeklyReset 璁＄畻涓嬩竴涓懆绐楀彛璧风偣锛堜笅鍛ㄤ竴鍏ㄥ眬鏃跺尯 0 鐐癸級銆?// 蹇呴』涓?timezone.StartOfWeek 鍚屽彛寰勶紝鍚﹀垯 Retry-After 浼氬亸宸€?
 func nextWeeklyReset(now time.Time) time.Time {
-	return timezone.StartOfWeek(now).AddDate(0, 0, 7)
+	return timezone.StartOfQuotaWeek(now).AddDate(0, 0, 7)
 }
 
-// nextMonthlyResetFrom 返回 30 天滚动窗口的下次重置时间（start + 30d）。
-// start 为 nil（未初始化）或已过期（now-start >= 30d，与 monthlyQuotaWindowExpired 同口径）时
-// 退化为 now+30d：过期窗口会在下次 increment 时重置为 now，下次重置即 now+30d；
-// 否则按 start 计算会得到一个过去的时间，使 Retry-After 落回 fallback 并触发客户端紧凑重试。
+// nextMonthlyResetFrom 杩斿洖 30 澶╂粴鍔ㄧ獥鍙ｇ殑涓嬫閲嶇疆鏃堕棿锛坰tart + 30d锛夈€?// start 涓?nil锛堟湭鍒濆鍖栵級鎴栧凡杩囨湡锛坣ow-start >= 30d锛屼笌 monthlyQuotaWindowExpired 鍚屽彛寰勶級鏃?// 閫€鍖栦负 now+30d锛氳繃鏈熺獥鍙ｄ細鍦ㄤ笅娆?increment 鏃堕噸缃负 now锛屼笅娆￠噸缃嵆 now+30d锛?// 鍚﹀垯鎸?start 璁＄畻浼氬緱鍒颁竴涓繃鍘荤殑鏃堕棿锛屼娇 Retry-After 钀藉洖 fallback 骞惰Е鍙戝鎴风绱у噾閲嶈瘯銆?
 func nextMonthlyResetFrom(start *time.Time, now time.Time) time.Time {
 	if start == nil || now.Sub(*start) >= 30*24*time.Hour {
 		return now.Add(30 * 24 * time.Hour)
@@ -1336,7 +1400,7 @@ func nextMonthlyResetFrom(start *time.Time, now time.Time) time.Time {
 	return start.Add(30 * 24 * time.Hour)
 }
 
-// quotaWindowExpired 判断窗口是否已过期：start 为 nil（未初始化）或在 currWindowStart 之前视为已过期。
+// quotaWindowExpired 鍒ゆ柇绐楀彛鏄惁宸茶繃鏈燂細start 涓?nil锛堟湭鍒濆鍖栵級鎴栧湪 currWindowStart 涔嬪墠瑙嗕负宸茶繃鏈熴€?
 func quotaWindowExpired(start *time.Time, currWindowStart time.Time) bool {
 	if start == nil {
 		return true
@@ -1344,9 +1408,7 @@ func quotaWindowExpired(start *time.Time, currWindowStart time.Time) bool {
 	return start.Before(currWindowStart)
 }
 
-// monthlyQuotaWindowExpired 判断 30 天滚动月度窗口是否已过期。
-// 过期条件：now - start >= 30×24h（与订阅模式 NeedsMonthlyReset 语义一致）。
-// start 为 nil 时视为已过期（未初始化窗口）。
+// monthlyQuotaWindowExpired 鍒ゆ柇 30 澶╂粴鍔ㄦ湀搴︾獥鍙ｆ槸鍚﹀凡杩囨湡銆?// 杩囨湡鏉′欢锛歯ow - start >= 30脳24h锛堜笌璁㈤槄妯″紡 NeedsMonthlyReset 璇箟涓€鑷达級銆?// start 涓?nil 鏃惰涓哄凡杩囨湡锛堟湭鍒濆鍖栫獥鍙ｏ級銆?
 func monthlyQuotaWindowExpired(start *time.Time, now time.Time) bool {
 	if start == nil {
 		return true
@@ -1354,9 +1416,7 @@ func monthlyQuotaWindowExpired(start *time.Time, now time.Time) bool {
 	return now.Sub(*start) >= 30*24*time.Hour
 }
 
-// HasUserPlatformQuotaLimit 判断该 user×platform 是否设了任一非 nil limit。
-// 写入点守卫:无 limit 直接跳过 Redis 写 + 脏集标记,消除无谓写入。
-// fail-safe:任何不确定(simple 模式除外)都返回 true 维持写入。
+// HasUserPlatformQuotaLimit 鍒ゆ柇璇?user脳platform 鏄惁璁句簡浠讳竴闈?nil limit銆?// 鍐欏叆鐐瑰畧鍗?鏃?limit 鐩存帴璺宠繃 Redis 鍐?+ 鑴忛泦鏍囪,娑堥櫎鏃犺皳鍐欏叆銆?// fail-safe:浠讳綍涓嶇‘瀹?simple 妯″紡闄ゅ)閮借繑鍥?true 缁存寔鍐欏叆銆?
 func (s *BillingCacheService) HasUserPlatformQuotaLimit(ctx context.Context, userID int64, platform string) bool {
 	if s.cfg.RunMode == config.RunModeSimple {
 		return false

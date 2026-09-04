@@ -72,6 +72,28 @@ func RequestedPublicModelFromContext(ctx context.Context) (string, bool) {
 	return model, true
 }
 
+// WithRequestedModel stores the model name supplied by the client before any
+// channel or composite routing rewrites.
+func WithRequestedModel(ctx context.Context, model string) context.Context {
+	model = strings.TrimSpace(model)
+	if ctx == nil || model == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, ctxkey.Model, model)
+}
+
+func RequestedModelFromContext(ctx context.Context) (string, bool) {
+	if ctx == nil {
+		return "", false
+	}
+	model, ok := ctx.Value(ctxkey.Model).(string)
+	model = strings.TrimSpace(model)
+	if !ok || model == "" {
+		return "", false
+	}
+	return model, true
+}
+
 func CompositeRouteSourceFromContext(ctx context.Context) (string, bool) {
 	if ctx == nil {
 		return "", false

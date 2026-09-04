@@ -8,6 +8,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 )
 
 const (
@@ -65,6 +66,16 @@ const (
 	FieldTotalRecharged = "total_recharged"
 	// FieldRpmLimit holds the string denoting the rpm_limit field in the database.
 	FieldRpmLimit = "rpm_limit"
+	// FieldTokenLimit1d holds the string denoting the token_limit_1d field in the database.
+	FieldTokenLimit1d = "token_limit_1d"
+	// FieldTokenLimit7d holds the string denoting the token_limit_7d field in the database.
+	FieldTokenLimit7d = "token_limit_7d"
+	// FieldTokenLimit30d holds the string denoting the token_limit_30d field in the database.
+	FieldTokenLimit30d = "token_limit_30d"
+	// FieldTokenQuotaStartedAt holds the string denoting the token_quota_started_at field in the database.
+	FieldTokenQuotaStartedAt = "token_quota_started_at"
+	// FieldModelRestrictions holds the string denoting the model_restrictions field in the database.
+	FieldModelRestrictions = "model_restrictions"
 	// EdgeAPIKeys holds the string denoting the api_keys edge name in mutations.
 	EdgeAPIKeys = "api_keys"
 	// EdgeRedeemCodes holds the string denoting the redeem_codes edge name in mutations.
@@ -221,6 +232,11 @@ var Columns = []string{
 	FieldBalanceNotifyExtraEmails,
 	FieldTotalRecharged,
 	FieldRpmLimit,
+	FieldTokenLimit1d,
+	FieldTokenLimit7d,
+	FieldTokenLimit30d,
+	FieldTokenQuotaStartedAt,
+	FieldModelRestrictions,
 }
 
 var (
@@ -295,6 +311,16 @@ var (
 	DefaultTotalRecharged float64
 	// DefaultRpmLimit holds the default value on creation for the "rpm_limit" field.
 	DefaultRpmLimit int
+	// DefaultTokenLimit1d holds the default value on creation for the "token_limit_1d" field.
+	DefaultTokenLimit1d int64
+	// DefaultTokenLimit7d holds the default value on creation for the "token_limit_7d" field.
+	DefaultTokenLimit7d int64
+	// DefaultTokenLimit30d holds the default value on creation for the "token_limit_30d" field.
+	DefaultTokenLimit30d int64
+	// DefaultTokenQuotaStartedAt holds the default value on creation for the "token_quota_started_at" field.
+	DefaultTokenQuotaStartedAt func() time.Time
+	// DefaultModelRestrictions holds the default value on creation for the "model_restrictions" field.
+	DefaultModelRestrictions []domain.UserModelRestriction
 )
 
 // OrderOption defines the ordering options for the User queries.
@@ -428,6 +454,26 @@ func ByTotalRecharged(opts ...sql.OrderTermOption) OrderOption {
 // ByRpmLimit orders the results by the rpm_limit field.
 func ByRpmLimit(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRpmLimit, opts...).ToFunc()
+}
+
+// ByTokenLimit1d orders the results by the token_limit_1d field.
+func ByTokenLimit1d(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTokenLimit1d, opts...).ToFunc()
+}
+
+// ByTokenLimit7d orders the results by the token_limit_7d field.
+func ByTokenLimit7d(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTokenLimit7d, opts...).ToFunc()
+}
+
+// ByTokenLimit30d orders the results by the token_limit_30d field.
+func ByTokenLimit30d(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTokenLimit30d, opts...).ToFunc()
+}
+
+// ByTokenQuotaStartedAt orders the results by the token_quota_started_at field.
+func ByTokenQuotaStartedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTokenQuotaStartedAt, opts...).ToFunc()
 }
 
 // ByAPIKeysCount orders the results by api_keys count.

@@ -2,6 +2,7 @@ package schema
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
@@ -120,6 +121,20 @@ func (User) Fields() []ent.Field {
 		// 用户级每分钟请求数上限（0 = 不限制）。仅当所在分组未设置 rpm_limit 时作为兜底生效。
 		field.Int("rpm_limit").
 			Default(0),
+
+		// 用户级滚动 Token 限额（0 = 不限制）。窗口覆盖所有计费模式和平台。
+		field.Int64("token_limit_1d").
+			Default(0),
+		field.Int64("token_limit_7d").
+			Default(0),
+		field.Int64("token_limit_30d").
+			Default(0),
+		// Token quota windows never include usage recorded before this timestamp.
+		field.Time("token_quota_started_at").
+			Default(time.Now),
+		// 模型禁用规则：空 reasoning_efforts 表示禁用整个模型模式。
+		field.JSON("model_restrictions", []domain.UserModelRestriction{}).
+			Default([]domain.UserModelRestriction{}),
 	}
 }
 

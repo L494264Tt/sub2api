@@ -204,15 +204,15 @@ func (r *userPlatformQuotaRepository) IncrementUsageWithReset(ctx context.Contex
 			// $6 = now：30 天滚动月度窗口以当前时刻为起始
 			_, e := txClient.ExecContext(txCtx, insertSQL,
 				userID, platform, cost,
-				timezone.StartOfDay(now), timezone.StartOfWeek(now), now, now)
+				timezone.StartOfQuotaDay(now), timezone.StartOfQuotaWeek(now), now, now)
 			return e
 		}
 		if err != nil {
 			return err
 		}
 
-		newDaily := maybeReset(existing.DailyUsageUsd, existing.DailyWindowStart, timezone.StartOfDay(now), cost)
-		newWeekly := maybeReset(existing.WeeklyUsageUsd, existing.WeeklyWindowStart, timezone.StartOfWeek(now), cost)
+		newDaily := maybeReset(existing.DailyUsageUsd, existing.DailyWindowStart, timezone.StartOfQuotaDay(now), cost)
+		newWeekly := maybeReset(existing.WeeklyUsageUsd, existing.WeeklyWindowStart, timezone.StartOfQuotaWeek(now), cost)
 		// 30 天滚动月度窗口：过期时重置为 cost 并以 now 为新起始，否则累加保留原起始
 		newMonthly, newMonthlyStart := monthlyMaybeReset(existing.MonthlyUsageUsd, existing.MonthlyWindowStart, cost, now)
 
@@ -220,8 +220,8 @@ func (r *userPlatformQuotaRepository) IncrementUsageWithReset(ctx context.Contex
 			SetDailyUsageUsd(newDaily).
 			SetWeeklyUsageUsd(newWeekly).
 			SetMonthlyUsageUsd(newMonthly).
-			SetDailyWindowStart(timezone.StartOfDay(now)).
-			SetWeeklyWindowStart(timezone.StartOfWeek(now)).
+			SetDailyWindowStart(timezone.StartOfQuotaDay(now)).
+			SetWeeklyWindowStart(timezone.StartOfQuotaWeek(now)).
 			SetMonthlyWindowStart(newMonthlyStart). // 30 天滚动：仅过期时更新起始
 			Save(txCtx)
 		return e

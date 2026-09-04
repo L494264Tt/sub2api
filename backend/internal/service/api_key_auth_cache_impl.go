@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 22 // v22: group free_openai_fast field
+const apiKeyAuthSnapshotVersion = 23 // v23: group free_openai_fast plus per-user token/model restrictions
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -366,6 +366,11 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			BalanceNotifyExtraEmails:   apiKey.User.BalanceNotifyExtraEmails,
 			TotalRecharged:             apiKey.User.TotalRecharged,
 			RPMLimit:                   apiKey.User.RPMLimit,
+			TokenLimit1d:               apiKey.User.TokenLimit1d,
+			TokenLimit7d:               apiKey.User.TokenLimit7d,
+			TokenLimit30d:              apiKey.User.TokenLimit30d,
+			TokenQuotaStartedAt:        apiKey.User.TokenQuotaStartedAt,
+			ModelRestrictions:          apiKey.User.ModelRestrictions,
 		},
 	}
 
@@ -474,6 +479,11 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			BalanceNotifyExtraEmails:   snapshot.User.BalanceNotifyExtraEmails,
 			TotalRecharged:             snapshot.User.TotalRecharged,
 			RPMLimit:                   snapshot.User.RPMLimit,
+			TokenLimit1d:               snapshot.User.TokenLimit1d,
+			TokenLimit7d:               snapshot.User.TokenLimit7d,
+			TokenLimit30d:              snapshot.User.TokenLimit30d,
+			TokenQuotaStartedAt:        snapshot.User.TokenQuotaStartedAt,
+			ModelRestrictions:          snapshot.User.ModelRestrictions,
 			UserGroupRPMOverride:       snapshot.User.UserGroupRPMOverride,
 		},
 	}
