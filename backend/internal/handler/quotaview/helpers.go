@@ -58,7 +58,7 @@ func buildWindowSlice(usage float64, limit *float64, start *time.Time, expired b
 	return out
 }
 
-// NeedsDailyReset 判断日窗口是否已过期：start 早于「全局时区当天 0 点」即过期。
+// NeedsDailyReset 判断日窗口是否已过期：start 早于「全局时区当前配额日 07:00」即过期。
 // 时区跟随 timezone.Location()（全局服务器时区），与 billing / repo 写入的 window_start 同口径。
 func NeedsDailyReset(start *time.Time, now time.Time) bool {
 	if start == nil {
