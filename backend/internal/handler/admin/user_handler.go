@@ -13,6 +13,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/handler/quotaview"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -59,32 +60,40 @@ func NewUserHandler(
 
 // CreateUserRequest represents admin create user request
 type CreateUserRequest struct {
-	Email                string   `json:"email" binding:"required,email"`
-	Password             string   `json:"password" binding:"required,min=6"`
-	Username             string   `json:"username"`
-	Notes                string   `json:"notes"`
-	Role                 string   `json:"role" binding:"omitempty,oneof=admin user"`
-	Balance              *float64 `json:"balance"`
-	Concurrency          int      `json:"concurrency"`
-	RPMLimit             int      `json:"rpm_limit"`
-	AllowedGroups        []int64  `json:"allowed_groups"`
-	RestrictPublicGroups bool     `json:"restrict_public_groups"`
+	Email                string                         `json:"email" binding:"required,email"`
+	Password             string                         `json:"password" binding:"required,min=6"`
+	Username             string                         `json:"username"`
+	Notes                string                         `json:"notes"`
+	Role                 string                         `json:"role" binding:"omitempty,oneof=admin user"`
+	Balance              *float64                       `json:"balance"`
+	Concurrency          int                            `json:"concurrency"`
+	RPMLimit             int                            `json:"rpm_limit"`
+	AllowedGroups        []int64                        `json:"allowed_groups"`
+	RestrictPublicGroups bool                           `json:"restrict_public_groups"`
+	TokenLimit1d         int64                          `json:"token_limit_1d" binding:"min=0"`
+	TokenLimit7d         int64                          `json:"token_limit_7d" binding:"min=0"`
+	TokenLimit30d        int64                          `json:"token_limit_30d" binding:"min=0"`
+	ModelRestrictions    []service.UserModelRestriction `json:"model_restrictions"`
 }
 
 // UpdateUserRequest represents admin update user request
 // 使用指针类型来区分"未提供"和"设置为0"
 type UpdateUserRequest struct {
-	Email                string   `json:"email" binding:"omitempty,email"`
-	Password             string   `json:"password" binding:"omitempty,min=6"`
-	Username             *string  `json:"username"`
-	Notes                *string  `json:"notes"`
-	Role                 string   `json:"role" binding:"omitempty,oneof=admin user"`
-	Balance              *float64 `json:"balance"`
-	Concurrency          *int     `json:"concurrency"`
-	RPMLimit             *int     `json:"rpm_limit"`
-	Status               string   `json:"status" binding:"omitempty,oneof=active disabled"`
-	AllowedGroups        *[]int64 `json:"allowed_groups"`
-	RestrictPublicGroups *bool    `json:"restrict_public_groups"`
+	Email                string                          `json:"email" binding:"omitempty,email"`
+	Password             string                          `json:"password" binding:"omitempty,min=6"`
+	Username             *string                         `json:"username"`
+	Notes                *string                         `json:"notes"`
+	Role                 string                          `json:"role" binding:"omitempty,oneof=admin user"`
+	Balance              *float64                        `json:"balance"`
+	Concurrency          *int                            `json:"concurrency"`
+	RPMLimit             *int                            `json:"rpm_limit"`
+	Status               string                          `json:"status" binding:"omitempty,oneof=active disabled"`
+	AllowedGroups        *[]int64                        `json:"allowed_groups"`
+	RestrictPublicGroups *bool                           `json:"restrict_public_groups"`
+	TokenLimit1d         *int64                          `json:"token_limit_1d" binding:"omitempty,min=0"`
+	TokenLimit7d         *int64                          `json:"token_limit_7d" binding:"omitempty,min=0"`
+	TokenLimit30d        *int64                          `json:"token_limit_30d" binding:"omitempty,min=0"`
+	ModelRestrictions    *[]service.UserModelRestriction `json:"model_restrictions"`
 	// GroupRates 用户专属分组倍率配置
 	// map[groupID]*rate，nil 表示删除该分组的专属倍率
 	GroupRates map[int64]*float64 `json:"group_rates"`
@@ -296,6 +305,10 @@ func (h *UserHandler) Create(c *gin.Context) {
 		RPMLimit:             req.RPMLimit,
 		AllowedGroups:        req.AllowedGroups,
 		RestrictPublicGroups: req.RestrictPublicGroups,
+		TokenLimit1d:         req.TokenLimit1d,
+		TokenLimit7d:         req.TokenLimit7d,
+		TokenLimit30d:        req.TokenLimit30d,
+		ModelRestrictions:    req.ModelRestrictions,
 		ActorAdminID:         getAdminIDFromContext(c),
 	})
 	if err != nil {
@@ -358,6 +371,10 @@ func (h *UserHandler) Update(c *gin.Context) {
 		RestrictPublicGroups: req.RestrictPublicGroups,
 		GroupRates:           req.GroupRates,
 		ActorAdminID:         getAdminIDFromContext(c),
+		TokenLimit1d:         req.TokenLimit1d,
+		TokenLimit7d:         req.TokenLimit7d,
+		TokenLimit30d:        req.TokenLimit30d,
+		ModelRestrictions:    req.ModelRestrictions,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -613,13 +630,17 @@ func (h *UserHandler) BatchUpdateConcurrency(c *gin.Context) {
 	response.Success(c, gin.H{"affected": affected})
 }
 
-// BatchUpdateLimits overwrites concurrency and/or RPM limits for multiple users.
+// BatchUpdateLimits overwrites request and/or GPT token limits for multiple users.
 // POST /api/v1/admin/users/batch-limits
 type BatchUpdateLimitsRequest struct {
-	UserIDs     []int64 `json:"user_ids"`
-	All         bool    `json:"all"`
-	Concurrency *int    `json:"concurrency" binding:"omitempty,min=0"`
-	RPMLimit    *int    `json:"rpm_limit" binding:"omitempty,min=0"`
+	UserIDs         []int64 `json:"user_ids"`
+	All             bool    `json:"all"`
+	Concurrency     *int    `json:"concurrency" binding:"omitempty,min=0"`
+	RPMLimit        *int    `json:"rpm_limit" binding:"omitempty,min=0"`
+	TokenLimit1d    *int64  `json:"token_limit_1d" binding:"omitempty,min=0"`
+	TokenLimit7d    *int64  `json:"token_limit_7d" binding:"omitempty,min=0"`
+	TokenLimit30d   *int64  `json:"token_limit_30d" binding:"omitempty,min=0"`
+	ResetTokenQuota bool    `json:"reset_token_quota"`
 }
 
 func (h *UserHandler) BatchUpdateLimits(c *gin.Context) {
@@ -628,8 +649,8 @@ func (h *UserHandler) BatchUpdateLimits(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
-	if req.Concurrency == nil && req.RPMLimit == nil {
-		response.BadRequest(c, "at least one of concurrency or rpm_limit is required")
+	if req.Concurrency == nil && req.RPMLimit == nil && req.TokenLimit1d == nil && req.TokenLimit7d == nil && req.TokenLimit30d == nil && !req.ResetTokenQuota {
+		response.BadRequest(c, "at least one limit or token quota reset is required")
 		return
 	}
 	if !req.All && len(req.UserIDs) == 0 {
@@ -672,12 +693,170 @@ func (h *UserHandler) BatchUpdateLimits(c *gin.Context) {
 		userIDs,
 		req.Concurrency,
 		req.RPMLimit,
+		req.TokenLimit1d,
+		req.TokenLimit7d,
+		req.TokenLimit30d,
+		req.ResetTokenQuota,
 	)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 	response.Success(c, gin.H{"affected": affected})
+}
+
+// BatchAdjustPlatformQuotaUsageRequest is the body for POST /admin/users/batch-platform-quota-usage.
+type BatchAdjustPlatformQuotaUsageRequest struct {
+	UserIDs        []int64  `json:"user_ids"`
+	All            bool     `json:"all"`
+	Platform       string   `json:"platform" binding:"required"`
+	DailyUsageUSD  *float64 `json:"daily_usage_usd"`
+	WeeklyUsageUSD *float64 `json:"weekly_usage_usd"`
+}
+
+func (h *UserHandler) BatchAdjustPlatformQuotaUsage(c *gin.Context) {
+	if h.userPlatformQuotaRepo == nil {
+		response.Error(c, 503, "platform quota service not available")
+		return
+	}
+
+	var req BatchAdjustPlatformQuotaUsageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if !service.IsAllowedQuotaPlatform(req.Platform) {
+		response.BadRequest(c, "invalid platform: "+req.Platform)
+		return
+	}
+	if req.DailyUsageUSD == nil && req.WeeklyUsageUSD == nil {
+		response.BadRequest(c, "at least one of daily_usage_usd or weekly_usage_usd is required")
+		return
+	}
+	if !req.All && len(req.UserIDs) == 0 {
+		response.BadRequest(c, "user_ids is required unless all=true")
+		return
+	}
+	if !req.All && len(req.UserIDs) > 500 {
+		response.BadRequest(c, "user_ids cannot exceed 500")
+		return
+	}
+	for _, f := range []struct {
+		name string
+		val  *float64
+	}{
+		{"daily_usage_usd", req.DailyUsageUSD},
+		{"weekly_usage_usd", req.WeeklyUsageUSD},
+	} {
+		if f.val == nil {
+			continue
+		}
+		if *f.val < 0 || math.IsNaN(*f.val) || math.IsInf(*f.val, 0) {
+			response.BadRequest(c, f.name+" must be a finite number >= 0")
+			return
+		}
+	}
+
+	ctx := c.Request.Context()
+	userIDs := req.UserIDs
+	if req.All {
+		userIDs = nil
+		page := 1
+		const pageSize = 500
+		for {
+			users, _, err := h.adminService.ListUsers(ctx, page, pageSize, service.UserListFilters{}, "id", "asc")
+			if err != nil {
+				response.ErrorFrom(c, err)
+				return
+			}
+			for _, user := range users {
+				userIDs = append(userIDs, user.ID)
+			}
+			if len(users) < pageSize {
+				break
+			}
+			page++
+		}
+	}
+	if len(userIDs) == 0 {
+		response.Success(c, gin.H{"affected": 0})
+		return
+	}
+
+	now := time.Now().UTC()
+	dailyWindowStart := timezone.StartOfQuotaDay(now)
+	weeklyWindowStart := timezone.StartOfQuotaWeek(now)
+	snapshots := make([]service.UserPlatformQuotaSnapshot, 0, len(userIDs))
+	for _, userID := range userIDs {
+		if _, err := h.adminService.GetUser(ctx, userID); err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		rec, err := h.userPlatformQuotaRepo.GetByUserPlatform(ctx, userID, req.Platform)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+
+		snapshot := service.UserPlatformQuotaSnapshot{
+			UserID:             userID,
+			Platform:           req.Platform,
+			DailyWindowStart:   dailyWindowStart,
+			WeeklyWindowStart:  weeklyWindowStart,
+			MonthlyWindowStart: now,
+		}
+		if rec != nil {
+			snapshot.DailyUsageUSD = rec.DailyUsageUSD
+			snapshot.WeeklyUsageUSD = rec.WeeklyUsageUSD
+			snapshot.MonthlyUsageUSD = rec.MonthlyUsageUSD
+			if rec.DailyWindowStart != nil {
+				snapshot.DailyWindowStart = *rec.DailyWindowStart
+			}
+			if rec.WeeklyWindowStart != nil {
+				snapshot.WeeklyWindowStart = *rec.WeeklyWindowStart
+			}
+			if rec.MonthlyWindowStart != nil {
+				snapshot.MonthlyWindowStart = *rec.MonthlyWindowStart
+			}
+		}
+		if req.DailyUsageUSD != nil {
+			snapshot.DailyUsageUSD = *req.DailyUsageUSD
+			snapshot.DailyWindowStart = dailyWindowStart
+		}
+		if req.WeeklyUsageUSD != nil {
+			snapshot.WeeklyUsageUSD = *req.WeeklyUsageUSD
+			snapshot.WeeklyWindowStart = weeklyWindowStart
+		}
+		snapshots = append(snapshots, snapshot)
+	}
+
+	if err := h.userPlatformQuotaRepo.BatchSnapshotUsage(ctx, snapshots, now); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if h.billingCache != nil {
+		for _, userID := range userIDs {
+			if err := h.billingCache.DeleteUserPlatformQuotaCache(ctx, userID, req.Platform); err != nil {
+				slog.Error("ALERT: quota cache invalidation failed after BatchAdjustPlatformQuotaUsage", "user_id", userID, "platform", req.Platform, "err", err)
+			}
+		}
+	}
+
+	slog.Info("admin.quota_usage_batch_adjusted",
+		"actor_admin_id", getAdminIDFromContext(c),
+		"target_user_count", len(userIDs),
+		"platform", req.Platform,
+		"daily_usage_usd", req.DailyUsageUSD,
+		"weekly_usage_usd", req.WeeklyUsageUSD,
+		"daily_window_start", dailyWindowStart,
+		"weekly_window_start", weeklyWindowStart)
+
+	response.Success(c, gin.H{
+		"affected":            len(snapshots),
+		"platform":            req.Platform,
+		"daily_window_start":  dailyWindowStart,
+		"weekly_window_start": weeklyWindowStart,
+	})
 }
 
 // GetUserPlatformQuotas GET /admin/users/:id/platform-quotas

@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 20 // v20: group long-context and model pricing fields (force refresh of pre-fix snapshots)
+const apiKeyAuthSnapshotVersion = 21 // v21: group pricing fields plus per-user token/model restrictions
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -366,6 +366,11 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			BalanceNotifyExtraEmails:   apiKey.User.BalanceNotifyExtraEmails,
 			TotalRecharged:             apiKey.User.TotalRecharged,
 			RPMLimit:                   apiKey.User.RPMLimit,
+			TokenLimit1d:               apiKey.User.TokenLimit1d,
+			TokenLimit7d:               apiKey.User.TokenLimit7d,
+			TokenLimit30d:              apiKey.User.TokenLimit30d,
+			TokenQuotaStartedAt:        apiKey.User.TokenQuotaStartedAt,
+			ModelRestrictions:          apiKey.User.ModelRestrictions,
 		},
 	}
 
@@ -471,6 +476,11 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			BalanceNotifyExtraEmails:   snapshot.User.BalanceNotifyExtraEmails,
 			TotalRecharged:             snapshot.User.TotalRecharged,
 			RPMLimit:                   snapshot.User.RPMLimit,
+			TokenLimit1d:               snapshot.User.TokenLimit1d,
+			TokenLimit7d:               snapshot.User.TokenLimit7d,
+			TokenLimit30d:              snapshot.User.TokenLimit30d,
+			TokenQuotaStartedAt:        snapshot.User.TokenQuotaStartedAt,
+			ModelRestrictions:          snapshot.User.ModelRestrictions,
 			UserGroupRPMOverride:       snapshot.User.UserGroupRPMOverride,
 		},
 	}

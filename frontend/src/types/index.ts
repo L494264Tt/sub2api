@@ -89,6 +89,10 @@ export interface User {
   frozen_balance?: number // Balance currently held by async batch jobs
   concurrency: number // Allowed concurrent requests
   rpm_limit?: number // User-level RPM cap (0 = unlimited); effective as fallback when group has no rpm_limit
+  token_limit_1d?: number
+  token_limit_7d?: number
+  token_limit_30d?: number
+  model_restrictions?: UserModelRestriction[]
   status: 'active' | 'disabled' // Account status
   allowed_groups: number[] | null // Allowed group IDs (null = all non-exclusive groups)
   balance_notify_enabled: boolean
@@ -99,6 +103,11 @@ export interface User {
   created_at: string
   updated_at: string
   deleted_at?: string | null
+}
+
+export interface UserModelRestriction {
+  model_pattern: string
+  reasoning_efforts: string[]
 }
 
 export interface AdminUser extends User {
@@ -1988,6 +1997,10 @@ export interface UpdateUserRequest {
   balance?: number
   concurrency?: number
   rpm_limit?: number
+  token_limit_1d?: number
+  token_limit_7d?: number
+  token_limit_30d?: number
+  model_restrictions?: UserModelRestriction[]
   status?: 'active' | 'disabled'
   allowed_groups?: number[] | null
   restrict_public_groups?: boolean

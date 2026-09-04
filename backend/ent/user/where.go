@@ -180,6 +180,26 @@ func RpmLimit(v int) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldRpmLimit, v))
 }
 
+// TokenLimit1d applies equality check predicate on the "token_limit_1d" field. It's identical to TokenLimit1dEQ.
+func TokenLimit1d(v int64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTokenLimit1d, v))
+}
+
+// TokenLimit7d applies equality check predicate on the "token_limit_7d" field. It's identical to TokenLimit7dEQ.
+func TokenLimit7d(v int64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTokenLimit7d, v))
+}
+
+// TokenLimit30d applies equality check predicate on the "token_limit_30d" field. It's identical to TokenLimit30dEQ.
+func TokenLimit30d(v int64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTokenLimit30d, v))
+}
+
+// TokenQuotaStartedAt applies equality check predicate on the "token_quota_started_at" field. It's identical to TokenQuotaStartedAtEQ.
+func TokenQuotaStartedAt(v time.Time) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTokenQuotaStartedAt, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldCreatedAt, v))
@@ -1398,6 +1418,166 @@ func RpmLimitLT(v int) predicate.User {
 // RpmLimitLTE applies the LTE predicate on the "rpm_limit" field.
 func RpmLimitLTE(v int) predicate.User {
 	return predicate.User(sql.FieldLTE(FieldRpmLimit, v))
+}
+
+// TokenLimit1dEQ applies the EQ predicate on the "token_limit_1d" field.
+func TokenLimit1dEQ(v int64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTokenLimit1d, v))
+}
+
+// TokenLimit1dNEQ applies the NEQ predicate on the "token_limit_1d" field.
+func TokenLimit1dNEQ(v int64) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldTokenLimit1d, v))
+}
+
+// TokenLimit1dIn applies the In predicate on the "token_limit_1d" field.
+func TokenLimit1dIn(vs ...int64) predicate.User {
+	return predicate.User(sql.FieldIn(FieldTokenLimit1d, vs...))
+}
+
+// TokenLimit1dNotIn applies the NotIn predicate on the "token_limit_1d" field.
+func TokenLimit1dNotIn(vs ...int64) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldTokenLimit1d, vs...))
+}
+
+// TokenLimit1dGT applies the GT predicate on the "token_limit_1d" field.
+func TokenLimit1dGT(v int64) predicate.User {
+	return predicate.User(sql.FieldGT(FieldTokenLimit1d, v))
+}
+
+// TokenLimit1dGTE applies the GTE predicate on the "token_limit_1d" field.
+func TokenLimit1dGTE(v int64) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldTokenLimit1d, v))
+}
+
+// TokenLimit1dLT applies the LT predicate on the "token_limit_1d" field.
+func TokenLimit1dLT(v int64) predicate.User {
+	return predicate.User(sql.FieldLT(FieldTokenLimit1d, v))
+}
+
+// TokenLimit1dLTE applies the LTE predicate on the "token_limit_1d" field.
+func TokenLimit1dLTE(v int64) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldTokenLimit1d, v))
+}
+
+// TokenLimit7dEQ applies the EQ predicate on the "token_limit_7d" field.
+func TokenLimit7dEQ(v int64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTokenLimit7d, v))
+}
+
+// TokenLimit7dNEQ applies the NEQ predicate on the "token_limit_7d" field.
+func TokenLimit7dNEQ(v int64) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldTokenLimit7d, v))
+}
+
+// TokenLimit7dIn applies the In predicate on the "token_limit_7d" field.
+func TokenLimit7dIn(vs ...int64) predicate.User {
+	return predicate.User(sql.FieldIn(FieldTokenLimit7d, vs...))
+}
+
+// TokenLimit7dNotIn applies the NotIn predicate on the "token_limit_7d" field.
+func TokenLimit7dNotIn(vs ...int64) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldTokenLimit7d, vs...))
+}
+
+// TokenLimit7dGT applies the GT predicate on the "token_limit_7d" field.
+func TokenLimit7dGT(v int64) predicate.User {
+	return predicate.User(sql.FieldGT(FieldTokenLimit7d, v))
+}
+
+// TokenLimit7dGTE applies the GTE predicate on the "token_limit_7d" field.
+func TokenLimit7dGTE(v int64) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldTokenLimit7d, v))
+}
+
+// TokenLimit7dLT applies the LT predicate on the "token_limit_7d" field.
+func TokenLimit7dLT(v int64) predicate.User {
+	return predicate.User(sql.FieldLT(FieldTokenLimit7d, v))
+}
+
+// TokenLimit7dLTE applies the LTE predicate on the "token_limit_7d" field.
+func TokenLimit7dLTE(v int64) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldTokenLimit7d, v))
+}
+
+// TokenLimit30dEQ applies the EQ predicate on the "token_limit_30d" field.
+func TokenLimit30dEQ(v int64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTokenLimit30d, v))
+}
+
+// TokenLimit30dNEQ applies the NEQ predicate on the "token_limit_30d" field.
+func TokenLimit30dNEQ(v int64) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldTokenLimit30d, v))
+}
+
+// TokenLimit30dIn applies the In predicate on the "token_limit_30d" field.
+func TokenLimit30dIn(vs ...int64) predicate.User {
+	return predicate.User(sql.FieldIn(FieldTokenLimit30d, vs...))
+}
+
+// TokenLimit30dNotIn applies the NotIn predicate on the "token_limit_30d" field.
+func TokenLimit30dNotIn(vs ...int64) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldTokenLimit30d, vs...))
+}
+
+// TokenLimit30dGT applies the GT predicate on the "token_limit_30d" field.
+func TokenLimit30dGT(v int64) predicate.User {
+	return predicate.User(sql.FieldGT(FieldTokenLimit30d, v))
+}
+
+// TokenLimit30dGTE applies the GTE predicate on the "token_limit_30d" field.
+func TokenLimit30dGTE(v int64) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldTokenLimit30d, v))
+}
+
+// TokenLimit30dLT applies the LT predicate on the "token_limit_30d" field.
+func TokenLimit30dLT(v int64) predicate.User {
+	return predicate.User(sql.FieldLT(FieldTokenLimit30d, v))
+}
+
+// TokenLimit30dLTE applies the LTE predicate on the "token_limit_30d" field.
+func TokenLimit30dLTE(v int64) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldTokenLimit30d, v))
+}
+
+// TokenQuotaStartedAtEQ applies the EQ predicate on the "token_quota_started_at" field.
+func TokenQuotaStartedAtEQ(v time.Time) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTokenQuotaStartedAt, v))
+}
+
+// TokenQuotaStartedAtNEQ applies the NEQ predicate on the "token_quota_started_at" field.
+func TokenQuotaStartedAtNEQ(v time.Time) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldTokenQuotaStartedAt, v))
+}
+
+// TokenQuotaStartedAtIn applies the In predicate on the "token_quota_started_at" field.
+func TokenQuotaStartedAtIn(vs ...time.Time) predicate.User {
+	return predicate.User(sql.FieldIn(FieldTokenQuotaStartedAt, vs...))
+}
+
+// TokenQuotaStartedAtNotIn applies the NotIn predicate on the "token_quota_started_at" field.
+func TokenQuotaStartedAtNotIn(vs ...time.Time) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldTokenQuotaStartedAt, vs...))
+}
+
+// TokenQuotaStartedAtGT applies the GT predicate on the "token_quota_started_at" field.
+func TokenQuotaStartedAtGT(v time.Time) predicate.User {
+	return predicate.User(sql.FieldGT(FieldTokenQuotaStartedAt, v))
+}
+
+// TokenQuotaStartedAtGTE applies the GTE predicate on the "token_quota_started_at" field.
+func TokenQuotaStartedAtGTE(v time.Time) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldTokenQuotaStartedAt, v))
+}
+
+// TokenQuotaStartedAtLT applies the LT predicate on the "token_quota_started_at" field.
+func TokenQuotaStartedAtLT(v time.Time) predicate.User {
+	return predicate.User(sql.FieldLT(FieldTokenQuotaStartedAt, v))
+}
+
+// TokenQuotaStartedAtLTE applies the LTE predicate on the "token_quota_started_at" field.
+func TokenQuotaStartedAtLTE(v time.Time) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldTokenQuotaStartedAt, v))
 }
 
 // HasAPIKeys applies the HasEdge predicate on the "api_keys" edge.

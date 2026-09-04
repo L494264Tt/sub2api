@@ -57,6 +57,12 @@ type UserPlatformQuotaCacheEntry struct {
 	MonthlyWindowStart *time.Time
 }
 
+type UserTokenUsageCache interface {
+	GetUserTokenUsageCache(ctx context.Context, userID int64, quotaStartedAt, quotaDayStartedAt time.Time) (*UserTokenUsage, bool, error)
+	SetUserTokenUsageCache(ctx context.Context, userID int64, quotaStartedAt, quotaDayStartedAt time.Time, usage *UserTokenUsage, ttl time.Duration) error
+	IncrementUserTokenUsageCache(ctx context.Context, userID int64, quotaStartedAt, quotaDayStartedAt time.Time, tokens int64) error
+}
+
 // BillingCache defines cache operations for billing service
 type BillingCache interface {
 	// Balance operations

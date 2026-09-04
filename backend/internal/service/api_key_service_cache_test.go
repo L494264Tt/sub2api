@@ -318,6 +318,43 @@ func TestAPIKeyService_SnapshotRoundTrip_PreservesReasoningEffortPolicy(t *testi
 	require.Equal(t, apiKey.Group.ReasoningEffortMappings, roundTrip.Group.ReasoningEffortMappings)
 }
 
+func TestAPIKeyService_SnapshotRoundTrip_PreservesUserRequestPolicies(t *testing.T) {
+	svc := NewAPIKeyService(nil, nil, nil, nil, nil, nil, &config.Config{})
+	quotaStartedAt := time.Date(2026, 7, 23, 5, 0, 0, 0, time.UTC)
+	apiKey := &APIKey{
+		ID:     1,
+		UserID: 2,
+		Key:    "k-user-request-policy",
+		Status: StatusActive,
+		User: &User{
+			ID:                  2,
+			Status:              StatusActive,
+			Role:                RoleUser,
+			Balance:             10,
+			Concurrency:         3,
+			TokenLimit1d:        100,
+			TokenLimit7d:        500,
+			TokenLimit30d:       1000,
+			TokenQuotaStartedAt: quotaStartedAt,
+			ModelRestrictions: []UserModelRestriction{{
+				ModelPattern:     "gpt-5.6-sol",
+				ReasoningEfforts: []string{"xhigh"},
+			}},
+		},
+	}
+
+	snapshot := svc.snapshotFromAPIKey(context.Background(), apiKey)
+	roundTrip := svc.snapshotToAPIKey(apiKey.Key, snapshot)
+
+	require.NotNil(t, roundTrip)
+	require.NotNil(t, roundTrip.User)
+	require.Equal(t, apiKey.User.TokenLimit1d, roundTrip.User.TokenLimit1d)
+	require.Equal(t, apiKey.User.TokenLimit7d, roundTrip.User.TokenLimit7d)
+	require.Equal(t, apiKey.User.TokenLimit30d, roundTrip.User.TokenLimit30d)
+	require.Equal(t, apiKey.User.TokenQuotaStartedAt, roundTrip.User.TokenQuotaStartedAt)
+	require.Equal(t, apiKey.User.ModelRestrictions, roundTrip.User.ModelRestrictions)
+}
+
 func TestAPIKeyService_GetByKey_IgnoresLegacyAuthCacheSnapshotWithoutMessagesDispatchConfig(t *testing.T) {
 	cache := &authCacheStub{}
 	var repoCalls int32
