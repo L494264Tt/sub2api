@@ -2554,6 +2554,10 @@ func (r *stubUsageLogRepo) SetUserLogs(userID int64, logs []service.UsageLog) {
 	r.userLogs[userID] = logs
 }
 
+func (r *stubUsageLogRepo) GetUserTokenUsage(context.Context, int64, time.Time, time.Time) (*service.UserTokenUsage, error) {
+	return &service.UserTokenUsage{}, nil
+}
+
 func (r *stubUsageLogRepo) Create(ctx context.Context, log *service.UsageLog) (bool, error) {
 	return false, errors.New("not implemented")
 }
