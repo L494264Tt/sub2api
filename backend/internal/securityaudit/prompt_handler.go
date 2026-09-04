@@ -25,10 +25,34 @@ type PromptAdminService interface {
 	DeleteByFilter(context.Context, DeleteByFilterRequest, int64) (*DeleteResult, error)
 }
 
+type ConversationAdminService interface {
+	ListConversationSessions(context.Context, ConversationFilter, int, int) (*ConversationPage, error)
+	GetConversationSession(context.Context, int64) (*ConversationSession, error)
+	DeleteConversationSession(context.Context, int64) (*ConversationDeleteResult, error)
+	ListConversationReviewRuns(context.Context, int, int) (*ConversationRunPage, error)
+	QueueConversationReview(context.Context, int64) (*ConversationRun, error)
+}
+
 type PromptAdminHandler struct{ service PromptAdminService }
 
 func NewPromptAdminHandler(service PromptAdminService) *PromptAdminHandler {
 	return &PromptAdminHandler{service: service}
+}
+
+func (h *PromptAdminHandler) ConversationRecorder() ConversationRecorder {
+	if h == nil {
+		return nil
+	}
+	recorder, _ := h.service.(ConversationRecorder)
+	return recorder
+}
+
+func (h *PromptAdminHandler) conversationAdminService() ConversationAdminService {
+	if h == nil {
+		return nil
+	}
+	service, _ := h.service.(ConversationAdminService)
+	return service
 }
 
 func (h *PromptAdminHandler) GetConfig(c *gin.Context) {
@@ -78,6 +102,125 @@ func (h *PromptAdminHandler) ProbeEndpoint(c *gin.Context) {
 
 func (h *PromptAdminHandler) GetRuntime(c *gin.Context) {
 	response.Success(c, h.service.Runtime(c.Request.Context()))
+}
+
+func (h *PromptAdminHandler) ListConversations(c *gin.Context) {
+	service := h.conversationAdminService()
+	if service == nil {
+		response.ErrorFrom(c, infraerrors.ServiceUnavailable("conversation_review_unavailable", "会话审查服务暂不可用"))
+		return
+	}
+	page, err := positiveIntQuery(c, "page", 1, 0)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	pageSize, err := positiveIntQuery(c, "page_size", 20, 100)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	filter, err := conversationFilterFromQuery(c)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	result, err := service.ListConversationSessions(c.Request.Context(), filter, page, pageSize)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *PromptAdminHandler) GetConversation(c *gin.Context) {
+	service := h.conversationAdminService()
+	if service == nil {
+		response.ErrorFrom(c, infraerrors.ServiceUnavailable("conversation_review_unavailable", "会话审查服务暂不可用"))
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		response.ErrorFrom(c, infraerrors.BadRequest("conversation_review_invalid_session_id", "会话 ID 无效"))
+		return
+	}
+	session, err := service.GetConversationSession(c.Request.Context(), id)
+	if errors.Is(err, ErrConversationNotFound) {
+		response.ErrorFrom(c, infraerrors.NotFound("conversation_review_session_not_found", "会话归档不存在"))
+		return
+	}
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, session)
+}
+
+func (h *PromptAdminHandler) DeleteConversation(c *gin.Context) {
+	service := h.conversationAdminService()
+	if service == nil {
+		response.ErrorFrom(c, infraerrors.ServiceUnavailable("conversation_review_unavailable", "会话审查服务暂不可用"))
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		response.ErrorFrom(c, infraerrors.BadRequest("conversation_review_invalid_session_id", "会话 ID 无效"))
+		return
+	}
+	result, err := service.DeleteConversationSession(c.Request.Context(), id)
+	if errors.Is(err, ErrConversationNotFound) {
+		response.ErrorFrom(c, infraerrors.NotFound("conversation_review_session_not_found", "会话归档不存在"))
+		return
+	}
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	setPromptAdminAudit(c, "success", "", map[string]any{"conversation_id": id, "deleted_turns": result.DeletedTurns})
+	response.Success(c, result)
+}
+
+func (h *PromptAdminHandler) ListConversationRuns(c *gin.Context) {
+	service := h.conversationAdminService()
+	if service == nil {
+		response.ErrorFrom(c, infraerrors.ServiceUnavailable("conversation_review_unavailable", "会话审查服务暂不可用"))
+		return
+	}
+	page, err := positiveIntQuery(c, "page", 1, 0)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	pageSize, err := positiveIntQuery(c, "page_size", 20, 100)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	result, err := service.ListConversationReviewRuns(c.Request.Context(), page, pageSize)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *PromptAdminHandler) RunConversationReview(c *gin.Context) {
+	service := h.conversationAdminService()
+	if service == nil {
+		response.ErrorFrom(c, infraerrors.ServiceUnavailable("conversation_review_unavailable", "会话审查服务暂不可用"))
+		return
+	}
+	run, err := service.QueueConversationReview(c.Request.Context(), adminID(c))
+	if err != nil {
+		if errors.Is(err, ErrConversationReviewDisabled) {
+			response.ErrorFrom(c, infraerrors.BadRequest("conversation_review_disabled", "请先启用提示词审计、会话归档和定期审查"))
+			return
+		}
+		response.ErrorFrom(c, err)
+		return
+	}
+	setPromptAdminAudit(c, "success", "", map[string]any{"conversation_review_run_id": run.ID})
+	response.Success(c, run)
 }
 
 func (h *PromptAdminHandler) ListEvents(c *gin.Context) {
@@ -283,6 +426,39 @@ func eventFilterFromQuery(c *gin.Context) (EventFilter, error) {
 		filter.EndAt = parseTimeQuery(value)
 		if filter.EndAt == nil {
 			return EventFilter{}, infraerrors.BadRequest("prompt_audit_invalid_time", "结束时间无效")
+		}
+	}
+	return filter, nil
+}
+
+func conversationFilterFromQuery(c *gin.Context) (ConversationFilter, error) {
+	groupID, err := optionalPositiveInt64Query(c, "group_id")
+	if err != nil {
+		return ConversationFilter{}, err
+	}
+	userID, err := optionalPositiveInt64Query(c, "user_id")
+	if err != nil {
+		return ConversationFilter{}, err
+	}
+	apiKeyID, err := optionalPositiveInt64Query(c, "api_key_id")
+	if err != nil {
+		return ConversationFilter{}, err
+	}
+	filter := ConversationFilter{
+		ReviewStatus: c.Query("review_status"), Decision: c.Query("decision"), GroupID: groupID,
+		UserID: userID, APIKeyID: apiKeyID, ConversationID: c.Query("conversation_id"),
+		RequestID: c.Query("request_id"), Keyword: c.Query("keyword"),
+	}
+	if value := strings.TrimSpace(c.Query("start_at")); value != "" {
+		filter.StartAt = parseTimeQuery(value)
+		if filter.StartAt == nil {
+			return ConversationFilter{}, infraerrors.BadRequest("conversation_review_invalid_time", "开始时间无效")
+		}
+	}
+	if value := strings.TrimSpace(c.Query("end_at")); value != "" {
+		filter.EndAt = parseTimeQuery(value)
+		if filter.EndAt == nil {
+			return ConversationFilter{}, infraerrors.BadRequest("conversation_review_invalid_time", "结束时间无效")
 		}
 	}
 	return filter, nil

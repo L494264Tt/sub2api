@@ -146,6 +146,11 @@ func registerPromptAuditRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		promptAudit.POST("/events/batch-delete", h.Admin.PromptAudit.BatchDelete)
 		promptAudit.POST("/events/delete-preview", h.Admin.PromptAudit.DeletePreview)
 		promptAudit.POST("/events/delete-by-filter", h.Admin.PromptAudit.DeleteByFilter)
+		promptAudit.GET("/conversations", h.Admin.PromptAudit.ListConversations)
+		promptAudit.GET("/conversations/:id", h.Admin.PromptAudit.GetConversation)
+		promptAudit.DELETE("/conversations/:id", h.Admin.PromptAudit.DeleteConversation)
+		promptAudit.GET("/conversation-review/runs", h.Admin.PromptAudit.ListConversationRuns)
+		promptAudit.POST("/conversation-review/run", h.Admin.PromptAudit.RunConversationReview)
 	}
 }
 

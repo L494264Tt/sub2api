@@ -25,6 +25,13 @@ export interface PromptAuditConfig {
   blocking_enabled: boolean
   blocking_latest_turn_only: boolean
   store_pass_events: boolean
+  conversation_recording_enabled?: boolean
+  conversation_review_enabled?: boolean
+  conversation_review_interval_minutes?: number
+  conversation_review_batch_size?: number
+  conversation_retention_days?: number
+  conversation_request_max_runes?: number
+  conversation_response_max_runes?: number
   effective_mode: PromptAuditMode
   strategy: 'priority'
   worker_count: number
@@ -39,8 +46,18 @@ export interface PromptAuditConfig {
   change_summary: string
 }
 
-export interface PromptAuditDraft extends Omit<PromptAuditConfig, 'endpoints'> {
+export interface PromptAuditDraft extends Omit<PromptAuditConfig,
+  'endpoints' | 'conversation_recording_enabled' | 'conversation_review_enabled' |
+  'conversation_review_interval_minutes' | 'conversation_review_batch_size' | 'conversation_retention_days' |
+  'conversation_request_max_runes' | 'conversation_response_max_runes'> {
   endpoints: PromptAuditEndpointDraft[]
+  conversation_recording_enabled: boolean
+  conversation_review_enabled: boolean
+  conversation_review_interval_minutes: number
+  conversation_review_batch_size: number
+  conversation_retention_days: number
+  conversation_request_max_runes: number
+  conversation_response_max_runes: number
 }
 
 export interface PromptAuditUpdateRequest {
@@ -49,6 +66,13 @@ export interface PromptAuditUpdateRequest {
   blocking_enabled: boolean
   blocking_latest_turn_only: boolean
   store_pass_events: boolean
+  conversation_recording_enabled: boolean
+  conversation_review_enabled: boolean
+  conversation_review_interval_minutes: number
+  conversation_review_batch_size: number
+  conversation_retention_days: number
+  conversation_request_max_runes: number
+  conversation_response_max_runes: number
   strategy: 'priority'
   worker_count: number
   queue_capacity: number
@@ -243,4 +267,105 @@ export interface PromptLoadErrors {
   runtime: string
   groups: string
   events: string
+}
+
+export interface ConversationTurn {
+  id: number
+  session_id: number
+  request_id: string
+  upstream_response_id: string
+  endpoint: string
+  protocol: string
+  model: string
+  request_transcript: string
+  model_response: string
+  request_chars: number
+  response_chars: number
+  request_truncated: boolean
+  response_truncated: boolean
+  status_code: number
+  review_status: 'pending' | 'processing' | 'reviewed' | 'failed' | string
+  review_attempts: number
+  reviewed_at?: string
+  review_decision: PromptDecision | ''
+  risk_level: PromptRiskLevel | ''
+  action: string
+  categories: string[]
+  matched_scanners: string[]
+  scanner_scores: Record<string, number>
+  scanner_evidence: Record<string, string>
+  scanner_backend: string
+  scanner_version: string
+  guard_endpoint_id: string
+  review_error_code: string
+  review_error_message: string
+  captured_at: string
+}
+
+export interface ConversationSession {
+  id: number
+  external_conversation_id: string
+  user_id: number
+  username: string
+  user_email: string
+  api_key_id: number
+  api_key_name: string
+  group_id?: number
+  group_name: string
+  provider: string
+  protocol: string
+  model: string
+  turn_count: number
+  pending_review_count: number
+  flagged_turn_count: number
+  latest_review_decision: PromptDecision | ''
+  started_at: string
+  last_turn_at: string
+  turns?: ConversationTurn[]
+}
+
+export interface ConversationFilters {
+  review_status: string
+  decision: string
+  group_id: string
+  user_id: string
+  api_key_id: string
+  conversation_id: string
+  request_id: string
+  keyword: string
+  start_at: string
+  end_at: string
+}
+
+export interface ConversationPage {
+  items: ConversationSession[]
+  total: number
+  page: number
+  page_size: number
+  pages: number
+}
+
+export interface ConversationReviewRun {
+  id: number
+  trigger_type: 'scheduled' | 'manual' | string
+  status: 'queued' | 'processing' | 'completed' | 'failed' | string
+  requested_by: number
+  config_version: number
+  batch_size: number
+  processed_count: number
+  flagged_count: number
+  failed_count: number
+  started_at?: string
+  completed_at?: string
+  last_error_code: string
+  last_error_message: string
+  created_at: string
+}
+
+export interface ConversationReviewRunPage {
+  items: ConversationReviewRun[]
+  total: number
+  page: number
+  page_size: number
+  pages: number
 }

@@ -4,6 +4,7 @@ import type {
   PromptAuditEndpointDraft,
   PromptAuditUpdateRequest,
   PromptEventFilters,
+  ConversationFilters,
 } from './types'
 
 export const DEFAULT_GUARD_MODEL = 'sileader/qwen3guard:0.6b'
@@ -30,6 +31,13 @@ export function cloneData<T>(value: T): T {
 export function configToDraft(config: PromptAuditConfig): PromptAuditDraft {
   return {
     ...cloneData(config),
+    conversation_recording_enabled: config.conversation_recording_enabled ?? false,
+    conversation_review_enabled: config.conversation_review_enabled ?? false,
+    conversation_review_interval_minutes: config.conversation_review_interval_minutes ?? 60,
+    conversation_review_batch_size: config.conversation_review_batch_size ?? 50,
+    conversation_retention_days: config.conversation_retention_days ?? 30,
+    conversation_request_max_runes: config.conversation_request_max_runes ?? 65536,
+    conversation_response_max_runes: config.conversation_response_max_runes ?? 65536,
     group_ids: [...(config.group_ids ?? [])],
     scanners: [...(config.scanners ?? [])],
     endpoints: (config.endpoints ?? []).map((endpoint) => ({
@@ -64,6 +72,13 @@ export function buildUpdateRequest(draft: PromptAuditDraft): PromptAuditUpdateRe
     blocking_enabled: draft.enabled && draft.blocking_enabled,
     blocking_latest_turn_only: draft.blocking_latest_turn_only,
     store_pass_events: draft.store_pass_events,
+    conversation_recording_enabled: draft.conversation_recording_enabled,
+    conversation_review_enabled: draft.enabled && draft.conversation_recording_enabled && draft.conversation_review_enabled,
+    conversation_review_interval_minutes: Number(draft.conversation_review_interval_minutes),
+    conversation_review_batch_size: Number(draft.conversation_review_batch_size),
+    conversation_retention_days: Number(draft.conversation_retention_days),
+    conversation_request_max_runes: Number(draft.conversation_request_max_runes),
+    conversation_response_max_runes: Number(draft.conversation_response_max_runes),
     strategy: 'priority',
     worker_count: Number(draft.worker_count),
     queue_capacity: Number(draft.queue_capacity),
@@ -104,6 +119,30 @@ export function emptyEventFilters(): PromptEventFilters {
     start_at: '',
     end_at: '',
   }
+}
+
+export function emptyConversationFilters(): ConversationFilters {
+  return {
+    review_status: '', decision: '', group_id: '', user_id: '', api_key_id: '',
+    conversation_id: '', request_id: '', keyword: '', start_at: '', end_at: '',
+  }
+}
+
+export function conversationQueryParams(filters: ConversationFilters): Record<string, string | number> {
+  const result: Record<string, string | number> = {}
+  for (const key of ['review_status', 'decision', 'conversation_id', 'request_id', 'keyword'] as const) {
+    const value = filters[key].trim()
+    if (value) result[key] = value
+  }
+  for (const key of ['group_id', 'user_id', 'api_key_id'] as const) {
+    const value = Number(filters[key])
+    if (Number.isInteger(value) && value > 0) result[key] = value
+  }
+  const start = toISO(filters.start_at)
+  const end = toISO(filters.end_at)
+  if (start) result.start_at = start
+  if (end) result.end_at = end
+  return result
 }
 
 function toISO(value: string): string | undefined {

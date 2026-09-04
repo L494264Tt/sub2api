@@ -350,7 +350,11 @@ func (m *ConfigManager) buildNextStorage(current storageConfig, req UpdateConfig
 	}
 	next := storageConfig{
 		Enabled: req.Enabled, BlockingEnabled: req.BlockingEnabled, BlockingLatestTurnOnly: req.BlockingLatestTurnOnly, StorePassEvents: req.StorePassEvents,
-		Strategy: strings.TrimSpace(req.Strategy), WorkerCount: req.WorkerCount,
+		ConversationRecordingEnabled: req.ConversationRecordingEnabled, ConversationReviewEnabled: req.ConversationReviewEnabled,
+		ConversationReviewIntervalMinutes: req.ConversationReviewIntervalMinutes, ConversationReviewBatchSize: req.ConversationReviewBatchSize,
+		ConversationRetentionDays: req.ConversationRetentionDays, ConversationRequestMaxRunes: req.ConversationRequestMaxRunes,
+		ConversationResponseMaxRunes: req.ConversationResponseMaxRunes,
+		Strategy:                     strings.TrimSpace(req.Strategy), WorkerCount: req.WorkerCount,
 		QueueCapacity: req.QueueCapacity, Scanners: append([]string(nil), req.Scanners...),
 		AllGroups: req.AllGroups, GroupIDs: append([]int64(nil), req.GroupIDs...),
 		ConfigVersion: current.ConfigVersion, UpdatedBy: actorID,

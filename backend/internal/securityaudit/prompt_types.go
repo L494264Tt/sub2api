@@ -67,20 +67,21 @@ const (
 )
 
 type Request struct {
-	RequestID  string
-	UserID     int64
-	Username   string
-	UserEmail  string
-	APIKeyID   int64
-	APIKeyName string
-	GroupID    *int64
-	GroupName  string
-	Provider   string
-	Endpoint   string
-	Protocol   string
-	Model      string
-	Body       []byte
-	Stage      string
+	RequestID      string
+	UserID         int64
+	Username       string
+	UserEmail      string
+	APIKeyID       int64
+	APIKeyName     string
+	GroupID        *int64
+	GroupName      string
+	Provider       string
+	Endpoint       string
+	Protocol       string
+	Model          string
+	Body           []byte
+	Stage          string
+	ConversationID string
 }
 
 func (r Request) Clone() Request {

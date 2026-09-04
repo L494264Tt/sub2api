@@ -25,6 +25,17 @@ const (
 	MinInputLimit        = 128
 	MaxInputLimit        = 100000
 	DefaultPayloadTTL    = 30 * time.Minute
+
+	DefaultConversationReviewIntervalMinutes = 60
+	MinConversationReviewIntervalMinutes     = 5
+	MaxConversationReviewIntervalMinutes     = 10080
+	DefaultConversationReviewBatchSize       = 50
+	MaxConversationReviewBatchSize           = 500
+	DefaultConversationRetentionDays         = 30
+	MaxConversationRetentionDays             = 3650
+	DefaultConversationRequestMaxRunes       = 65536
+	DefaultConversationResponseMaxRunes      = 65536
+	MaxConversationCaptureRunes              = 500000
 )
 
 type SecretEncryptor interface {
@@ -64,21 +75,28 @@ type StorageEndpoint struct {
 }
 
 type storageConfig struct {
-	Enabled                bool              `json:"enabled"`
-	BlockingEnabled        bool              `json:"blocking_enabled"`
-	BlockingLatestTurnOnly bool              `json:"blocking_latest_turn_only"`
-	StorePassEvents        bool              `json:"store_pass_events"`
-	Strategy               string            `json:"strategy"`
-	WorkerCount            int               `json:"worker_count"`
-	QueueCapacity          int               `json:"queue_capacity"`
-	Scanners               []string          `json:"scanners"`
-	AllGroups              bool              `json:"all_groups"`
-	GroupIDs               []int64           `json:"group_ids"`
-	Endpoints              []StorageEndpoint `json:"endpoints"`
-	ConfigVersion          int64             `json:"config_version"`
-	UpdatedAt              time.Time         `json:"updated_at"`
-	UpdatedBy              int64             `json:"updated_by"`
-	ChangeSummary          string            `json:"change_summary"`
+	Enabled                           bool              `json:"enabled"`
+	BlockingEnabled                   bool              `json:"blocking_enabled"`
+	BlockingLatestTurnOnly            bool              `json:"blocking_latest_turn_only"`
+	StorePassEvents                   bool              `json:"store_pass_events"`
+	ConversationRecordingEnabled      bool              `json:"conversation_recording_enabled"`
+	ConversationReviewEnabled         bool              `json:"conversation_review_enabled"`
+	ConversationReviewIntervalMinutes int               `json:"conversation_review_interval_minutes"`
+	ConversationReviewBatchSize       int               `json:"conversation_review_batch_size"`
+	ConversationRetentionDays         int               `json:"conversation_retention_days"`
+	ConversationRequestMaxRunes       int               `json:"conversation_request_max_runes"`
+	ConversationResponseMaxRunes      int               `json:"conversation_response_max_runes"`
+	Strategy                          string            `json:"strategy"`
+	WorkerCount                       int               `json:"worker_count"`
+	QueueCapacity                     int               `json:"queue_capacity"`
+	Scanners                          []string          `json:"scanners"`
+	AllGroups                         bool              `json:"all_groups"`
+	GroupIDs                          []int64           `json:"group_ids"`
+	Endpoints                         []StorageEndpoint `json:"endpoints"`
+	ConfigVersion                     int64             `json:"config_version"`
+	UpdatedAt                         time.Time         `json:"updated_at"`
+	UpdatedBy                         int64             `json:"updated_by"`
+	ChangeSummary                     string            `json:"change_summary"`
 }
 
 type ActiveEndpoint struct {
@@ -99,22 +117,29 @@ type ActiveEndpoint struct {
 }
 
 type ActiveConfig struct {
-	RiskControlEnabled     bool
-	Enabled                bool
-	BlockingEnabled        bool
-	BlockingLatestTurnOnly bool
-	StorePassEvents        bool
-	Strategy               string
-	WorkerCount            int
-	QueueCapacity          int
-	Scanners               []string
-	AllGroups              bool
-	GroupIDs               []int64
-	Endpoints              []ActiveEndpoint
-	ConfigVersion          int64
-	UpdatedAt              time.Time
-	UpdatedBy              int64
-	ChangeSummary          string
+	RiskControlEnabled                bool
+	Enabled                           bool
+	BlockingEnabled                   bool
+	BlockingLatestTurnOnly            bool
+	StorePassEvents                   bool
+	ConversationRecordingEnabled      bool
+	ConversationReviewEnabled         bool
+	ConversationReviewIntervalMinutes int
+	ConversationReviewBatchSize       int
+	ConversationRetentionDays         int
+	ConversationRequestMaxRunes       int
+	ConversationResponseMaxRunes      int
+	Strategy                          string
+	WorkerCount                       int
+	QueueCapacity                     int
+	Scanners                          []string
+	AllGroups                         bool
+	GroupIDs                          []int64
+	Endpoints                         []ActiveEndpoint
+	ConfigVersion                     int64
+	UpdatedAt                         time.Time
+	UpdatedBy                         int64
+	ChangeSummary                     string
 }
 
 type PublicEndpoint struct {
@@ -131,22 +156,29 @@ type PublicEndpoint struct {
 }
 
 type PublicConfig struct {
-	Enabled                bool             `json:"enabled"`
-	BlockingEnabled        bool             `json:"blocking_enabled"`
-	BlockingLatestTurnOnly bool             `json:"blocking_latest_turn_only"`
-	StorePassEvents        bool             `json:"store_pass_events"`
-	EffectiveMode          Mode             `json:"effective_mode"`
-	Strategy               string           `json:"strategy"`
-	WorkerCount            int              `json:"worker_count"`
-	QueueCapacity          int              `json:"queue_capacity"`
-	Scanners               []string         `json:"scanners"`
-	AllGroups              bool             `json:"all_groups"`
-	GroupIDs               []int64          `json:"group_ids"`
-	Endpoints              []PublicEndpoint `json:"endpoints"`
-	ConfigVersion          int64            `json:"config_version"`
-	UpdatedAt              time.Time        `json:"updated_at"`
-	UpdatedBy              int64            `json:"updated_by"`
-	ChangeSummary          string           `json:"change_summary"`
+	Enabled                           bool             `json:"enabled"`
+	BlockingEnabled                   bool             `json:"blocking_enabled"`
+	BlockingLatestTurnOnly            bool             `json:"blocking_latest_turn_only"`
+	StorePassEvents                   bool             `json:"store_pass_events"`
+	ConversationRecordingEnabled      bool             `json:"conversation_recording_enabled"`
+	ConversationReviewEnabled         bool             `json:"conversation_review_enabled"`
+	ConversationReviewIntervalMinutes int              `json:"conversation_review_interval_minutes"`
+	ConversationReviewBatchSize       int              `json:"conversation_review_batch_size"`
+	ConversationRetentionDays         int              `json:"conversation_retention_days"`
+	ConversationRequestMaxRunes       int              `json:"conversation_request_max_runes"`
+	ConversationResponseMaxRunes      int              `json:"conversation_response_max_runes"`
+	EffectiveMode                     Mode             `json:"effective_mode"`
+	Strategy                          string           `json:"strategy"`
+	WorkerCount                       int              `json:"worker_count"`
+	QueueCapacity                     int              `json:"queue_capacity"`
+	Scanners                          []string         `json:"scanners"`
+	AllGroups                         bool             `json:"all_groups"`
+	GroupIDs                          []int64          `json:"group_ids"`
+	Endpoints                         []PublicEndpoint `json:"endpoints"`
+	ConfigVersion                     int64            `json:"config_version"`
+	UpdatedAt                         time.Time        `json:"updated_at"`
+	UpdatedBy                         int64            `json:"updated_by"`
+	ChangeSummary                     string           `json:"change_summary"`
 }
 
 type UpdateEndpoint struct {
@@ -163,34 +195,48 @@ type UpdateEndpoint struct {
 }
 
 type UpdateConfigRequest struct {
-	ExpectedConfigVersion  int64            `json:"expected_config_version" binding:"required"`
-	Enabled                bool             `json:"enabled"`
-	BlockingEnabled        bool             `json:"blocking_enabled"`
-	BlockingLatestTurnOnly bool             `json:"blocking_latest_turn_only"`
-	StorePassEvents        bool             `json:"store_pass_events"`
-	Strategy               string           `json:"strategy"`
-	WorkerCount            int              `json:"worker_count"`
-	QueueCapacity          int              `json:"queue_capacity"`
-	Scanners               []string         `json:"scanners"`
-	AllGroups              bool             `json:"all_groups"`
-	GroupIDs               []int64          `json:"group_ids"`
-	Endpoints              []UpdateEndpoint `json:"endpoints"`
+	ExpectedConfigVersion             int64            `json:"expected_config_version" binding:"required"`
+	Enabled                           bool             `json:"enabled"`
+	BlockingEnabled                   bool             `json:"blocking_enabled"`
+	BlockingLatestTurnOnly            bool             `json:"blocking_latest_turn_only"`
+	StorePassEvents                   bool             `json:"store_pass_events"`
+	ConversationRecordingEnabled      bool             `json:"conversation_recording_enabled"`
+	ConversationReviewEnabled         bool             `json:"conversation_review_enabled"`
+	ConversationReviewIntervalMinutes int              `json:"conversation_review_interval_minutes"`
+	ConversationReviewBatchSize       int              `json:"conversation_review_batch_size"`
+	ConversationRetentionDays         int              `json:"conversation_retention_days"`
+	ConversationRequestMaxRunes       int              `json:"conversation_request_max_runes"`
+	ConversationResponseMaxRunes      int              `json:"conversation_response_max_runes"`
+	Strategy                          string           `json:"strategy"`
+	WorkerCount                       int              `json:"worker_count"`
+	QueueCapacity                     int              `json:"queue_capacity"`
+	Scanners                          []string         `json:"scanners"`
+	AllGroups                         bool             `json:"all_groups"`
+	GroupIDs                          []int64          `json:"group_ids"`
+	Endpoints                         []UpdateEndpoint `json:"endpoints"`
 }
 
 func DefaultStorageConfig() storageConfig {
 	return storageConfig{
-		Enabled:                false,
-		BlockingEnabled:        false,
-		BlockingLatestTurnOnly: false,
-		StorePassEvents:        false,
-		Strategy:               "priority",
-		WorkerCount:            DefaultWorkerCount,
-		QueueCapacity:          DefaultQueueCapacity,
-		Scanners:               append([]string(nil), AllScannerIDs...),
-		AllGroups:              true,
-		GroupIDs:               []int64{},
-		Endpoints:              []StorageEndpoint{},
-		ConfigVersion:          1,
+		Enabled:                           false,
+		BlockingEnabled:                   false,
+		BlockingLatestTurnOnly:            false,
+		StorePassEvents:                   false,
+		ConversationRecordingEnabled:      false,
+		ConversationReviewEnabled:         false,
+		ConversationReviewIntervalMinutes: DefaultConversationReviewIntervalMinutes,
+		ConversationReviewBatchSize:       DefaultConversationReviewBatchSize,
+		ConversationRetentionDays:         DefaultConversationRetentionDays,
+		ConversationRequestMaxRunes:       DefaultConversationRequestMaxRunes,
+		ConversationResponseMaxRunes:      DefaultConversationResponseMaxRunes,
+		Strategy:                          "priority",
+		WorkerCount:                       DefaultWorkerCount,
+		QueueCapacity:                     DefaultQueueCapacity,
+		Scanners:                          append([]string(nil), AllScannerIDs...),
+		AllGroups:                         true,
+		GroupIDs:                          []int64{},
+		Endpoints:                         []StorageEndpoint{},
+		ConfigVersion:                     1,
 	}
 }
 
@@ -225,6 +271,21 @@ func normalizeStorageConfig(cfg *storageConfig) {
 	if cfg.QueueCapacity == 0 {
 		cfg.QueueCapacity = DefaultQueueCapacity
 	}
+	if cfg.ConversationReviewIntervalMinutes == 0 {
+		cfg.ConversationReviewIntervalMinutes = DefaultConversationReviewIntervalMinutes
+	}
+	if cfg.ConversationReviewBatchSize == 0 {
+		cfg.ConversationReviewBatchSize = DefaultConversationReviewBatchSize
+	}
+	if cfg.ConversationRetentionDays == 0 {
+		cfg.ConversationRetentionDays = DefaultConversationRetentionDays
+	}
+	if cfg.ConversationRequestMaxRunes == 0 {
+		cfg.ConversationRequestMaxRunes = DefaultConversationRequestMaxRunes
+	}
+	if cfg.ConversationResponseMaxRunes == 0 {
+		cfg.ConversationResponseMaxRunes = DefaultConversationResponseMaxRunes
+	}
 	if len(cfg.Scanners) == 0 {
 		cfg.Scanners = append([]string(nil), AllScannerIDs...)
 	}
@@ -257,6 +318,15 @@ func normalizeStorageConfig(cfg *storageConfig) {
 func validateStorageConfig(cfg storageConfig) error {
 	if cfg.BlockingEnabled && !cfg.Enabled {
 		return infraerrors.BadRequest(ErrorCodeRequiresEnabled, "开启同步阻止前必须先启用提示词审计")
+	}
+	if cfg.ConversationReviewEnabled && (!cfg.Enabled || !cfg.ConversationRecordingEnabled) {
+		return infraerrors.BadRequest("conversation_review_requires_recording", "启用定期对话审查前必须启用提示词审计和会话归档")
+	}
+	if cfg.ConversationRecordingEnabled || cfg.ConversationReviewEnabled {
+		if err := validateConversationConfig(cfg.ConversationReviewIntervalMinutes, cfg.ConversationReviewBatchSize,
+			cfg.ConversationRetentionDays, cfg.ConversationRequestMaxRunes, cfg.ConversationResponseMaxRunes); err != nil {
+			return err
+		}
 	}
 	if cfg.Strategy != "priority" {
 		return infraerrors.BadRequest("prompt_audit_invalid_strategy", "提示词审计策略仅支持 priority")
@@ -315,6 +385,15 @@ func validateUpdateConfigRequest(req UpdateConfigRequest) error {
 	if req.QueueCapacity < 1 || req.QueueCapacity > MaxQueueCapacity {
 		return infraerrors.BadRequest("prompt_audit_invalid_queue_capacity", "队列容量超出允许范围")
 	}
+	if req.ConversationReviewEnabled && (!req.Enabled || !req.ConversationRecordingEnabled) {
+		return infraerrors.BadRequest("conversation_review_requires_recording", "启用定期对话审查前必须启用提示词审计和会话归档")
+	}
+	if req.ConversationRecordingEnabled || req.ConversationReviewEnabled {
+		if err := validateConversationConfig(req.ConversationReviewIntervalMinutes, req.ConversationReviewBatchSize,
+			req.ConversationRetentionDays, req.ConversationRequestMaxRunes, req.ConversationResponseMaxRunes); err != nil {
+			return err
+		}
+	}
 	if len(req.Scanners) == 0 {
 		return infraerrors.BadRequest("prompt_audit_scanners_required", "至少需要启用一个风险分类")
 	}
@@ -340,6 +419,23 @@ func validateUpdateConfigRequest(req UpdateConfigRequest) error {
 		if endpoint.InputLimit < MinInputLimit || endpoint.InputLimit > MaxInputLimit {
 			return infraerrors.BadRequest("prompt_audit_invalid_input_limit", "审计节点输入上限超出允许范围")
 		}
+	}
+	return nil
+}
+
+func validateConversationConfig(intervalMinutes, batchSize, retentionDays, requestMaxRunes, responseMaxRunes int) error {
+	if intervalMinutes < MinConversationReviewIntervalMinutes || intervalMinutes > MaxConversationReviewIntervalMinutes {
+		return infraerrors.BadRequest("conversation_review_invalid_interval", "定期对话审查间隔超出允许范围")
+	}
+	if batchSize < 1 || batchSize > MaxConversationReviewBatchSize {
+		return infraerrors.BadRequest("conversation_review_invalid_batch_size", "定期对话审查批量大小超出允许范围")
+	}
+	if retentionDays < 1 || retentionDays > MaxConversationRetentionDays {
+		return infraerrors.BadRequest("conversation_review_invalid_retention", "会话归档保留天数超出允许范围")
+	}
+	if requestMaxRunes < MinInputLimit || requestMaxRunes > MaxConversationCaptureRunes ||
+		responseMaxRunes < MinInputLimit || responseMaxRunes > MaxConversationCaptureRunes {
+		return infraerrors.BadRequest("conversation_review_invalid_capture_limit", "会话归档内容长度上限超出允许范围")
 	}
 	return nil
 }
@@ -413,7 +509,11 @@ func PublicFromStorage(cfg storageConfig, riskControlEnabled bool, invalidTokenE
 	active := ActiveConfig{RiskControlEnabled: riskControlEnabled, Enabled: cfg.Enabled, BlockingEnabled: cfg.BlockingEnabled}
 	return PublicConfig{
 		Enabled: cfg.Enabled, BlockingEnabled: cfg.BlockingEnabled, BlockingLatestTurnOnly: cfg.BlockingLatestTurnOnly, StorePassEvents: cfg.StorePassEvents,
-		EffectiveMode: active.EffectiveMode(), Strategy: cfg.Strategy, WorkerCount: cfg.WorkerCount,
+		ConversationRecordingEnabled: cfg.ConversationRecordingEnabled, ConversationReviewEnabled: cfg.ConversationReviewEnabled,
+		ConversationReviewIntervalMinutes: cfg.ConversationReviewIntervalMinutes, ConversationReviewBatchSize: cfg.ConversationReviewBatchSize,
+		ConversationRetentionDays: cfg.ConversationRetentionDays, ConversationRequestMaxRunes: cfg.ConversationRequestMaxRunes,
+		ConversationResponseMaxRunes: cfg.ConversationResponseMaxRunes,
+		EffectiveMode:                active.EffectiveMode(), Strategy: cfg.Strategy, WorkerCount: cfg.WorkerCount,
 		QueueCapacity: cfg.QueueCapacity, Scanners: scanners, AllGroups: cfg.AllGroups,
 		GroupIDs: groupIDs, Endpoints: endpoints, ConfigVersion: cfg.ConfigVersion,
 		UpdatedAt: cfg.UpdatedAt, UpdatedBy: cfg.UpdatedBy, ChangeSummary: cfg.ChangeSummary,
@@ -425,7 +525,11 @@ func ActiveFromStorage(cfg storageConfig, riskControlEnabled bool, encryptor Sec
 		RiskControlEnabled: riskControlEnabled, Enabled: cfg.Enabled, BlockingEnabled: cfg.BlockingEnabled,
 		BlockingLatestTurnOnly: cfg.BlockingLatestTurnOnly,
 		StorePassEvents:        cfg.StorePassEvents, Strategy: cfg.Strategy, WorkerCount: cfg.WorkerCount,
-		QueueCapacity: cfg.QueueCapacity, Scanners: append([]string(nil), cfg.Scanners...), AllGroups: cfg.AllGroups,
+		ConversationRecordingEnabled: cfg.ConversationRecordingEnabled, ConversationReviewEnabled: cfg.ConversationReviewEnabled,
+		ConversationReviewIntervalMinutes: cfg.ConversationReviewIntervalMinutes, ConversationReviewBatchSize: cfg.ConversationReviewBatchSize,
+		ConversationRetentionDays: cfg.ConversationRetentionDays, ConversationRequestMaxRunes: cfg.ConversationRequestMaxRunes,
+		ConversationResponseMaxRunes: cfg.ConversationResponseMaxRunes,
+		QueueCapacity:                cfg.QueueCapacity, Scanners: append([]string(nil), cfg.Scanners...), AllGroups: cfg.AllGroups,
 		GroupIDs: append([]int64(nil), cfg.GroupIDs...), ConfigVersion: cfg.ConfigVersion,
 		UpdatedAt: cfg.UpdatedAt, UpdatedBy: cfg.UpdatedBy, ChangeSummary: cfg.ChangeSummary,
 		Endpoints: make([]ActiveEndpoint, 0, len(cfg.Endpoints)),
@@ -460,16 +564,24 @@ func ActiveFromStorage(cfg storageConfig, riskControlEnabled bool, encryptor Sec
 
 func changeSummary(cfg storageConfig) string {
 	summary := struct {
-		Enabled                bool   `json:"enabled"`
-		BlockingEnabled        bool   `json:"blocking_enabled"`
-		BlockingLatestTurnOnly bool   `json:"blocking_latest_turn_only"`
-		StorePassEvents        bool   `json:"store_pass_events"`
-		EndpointCount          int    `json:"endpoint_count"`
-		ScannerCount           int    `json:"scanner_count"`
-		AllGroups              bool   `json:"all_groups"`
-		GroupCount             int    `json:"group_count"`
-		GroupHash              string `json:"group_hash"`
-	}{cfg.Enabled, cfg.BlockingEnabled, cfg.BlockingLatestTurnOnly, cfg.StorePassEvents, len(cfg.Endpoints), len(cfg.Scanners), cfg.AllGroups, len(cfg.GroupIDs), ""}
+		Enabled                           bool   `json:"enabled"`
+		BlockingEnabled                   bool   `json:"blocking_enabled"`
+		BlockingLatestTurnOnly            bool   `json:"blocking_latest_turn_only"`
+		StorePassEvents                   bool   `json:"store_pass_events"`
+		ConversationRecordingEnabled      bool   `json:"conversation_recording_enabled"`
+		ConversationReviewEnabled         bool   `json:"conversation_review_enabled"`
+		ConversationReviewIntervalMinutes int    `json:"conversation_review_interval_minutes"`
+		ConversationReviewBatchSize       int    `json:"conversation_review_batch_size"`
+		ConversationRetentionDays         int    `json:"conversation_retention_days"`
+		EndpointCount                     int    `json:"endpoint_count"`
+		ScannerCount                      int    `json:"scanner_count"`
+		AllGroups                         bool   `json:"all_groups"`
+		GroupCount                        int    `json:"group_count"`
+		GroupHash                         string `json:"group_hash"`
+	}{cfg.Enabled, cfg.BlockingEnabled, cfg.BlockingLatestTurnOnly, cfg.StorePassEvents,
+		cfg.ConversationRecordingEnabled, cfg.ConversationReviewEnabled, cfg.ConversationReviewIntervalMinutes,
+		cfg.ConversationReviewBatchSize, cfg.ConversationRetentionDays,
+		len(cfg.Endpoints), len(cfg.Scanners), cfg.AllGroups, len(cfg.GroupIDs), ""}
 	rawGroups, _ := json.Marshal(cfg.GroupIDs)
 	digest := sha256.Sum256(rawGroups)
 	summary.GroupHash = hex.EncodeToString(digest[:])
