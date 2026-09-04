@@ -80,7 +80,7 @@ func TestLazyZeroQuotaForResponse_MonthlyResetsAt_NotDrifting(t *testing.T) {
 	}
 }
 
-// TestNeedsDailyReset_FollowsServerTimezone 验证日窗口过期判断按全局时区（北京 0 点）而非 UTC。
+// TestNeedsDailyReset_FollowsServerTimezone 验证日窗口过期判断按全局时区（北京 07:00）而非 UTC。
 func TestNeedsDailyReset_FollowsServerTimezone(t *testing.T) {
 	if err := timezone.Init("Asia/Shanghai"); err != nil {
 		t.Fatalf("Init: %v", err)
@@ -96,14 +96,14 @@ func TestNeedsDailyReset_FollowsServerTimezone(t *testing.T) {
 		t.Error("上一个北京日的窗口应判定为过期")
 	}
 
-	// start = 2026-05-25 20:00 UTC = 2026-05-26 04:00 +08（北京 5/26 同日）→ 不应过期
-	startSameBeijingDay := time.Date(2026, 5, 25, 20, 0, 0, 0, time.UTC)
+	// start = 2026-05-25 23:00 UTC = 2026-05-26 07:00 +08（当前配额日窗口）→ 不应过期
+	startSameBeijingDay := time.Date(2026, 5, 25, 23, 0, 0, 0, time.UTC)
 	if NeedsDailyReset(&startSameBeijingDay, now) {
-		t.Error("同一北京日的窗口不应判定为过期")
+		t.Error("当前北京配额日窗口不应判定为过期")
 	}
 }
 
-// TestNextDailyResetTime_FollowsServerTimezone 验证下次日重置 = 次日北京 0 点。
+// TestNextDailyResetTime_FollowsServerTimezone 验证下次日重置 = 次日北京 07:00。
 func TestNextDailyResetTime_FollowsServerTimezone(t *testing.T) {
 	if err := timezone.Init("Asia/Shanghai"); err != nil {
 		t.Fatalf("Init: %v", err)
@@ -111,13 +111,13 @@ func TestNextDailyResetTime_FollowsServerTimezone(t *testing.T) {
 	t.Cleanup(func() { _ = timezone.Init("UTC") })
 
 	now := time.Date(2026, 5, 25, 23, 0, 0, 0, time.UTC)            // 北京 5/26 07:00
-	want := time.Date(2026, 5, 27, 0, 0, 0, 0, timezone.Location()) // 北京 5/27 00:00
+	want := time.Date(2026, 5, 27, 7, 0, 0, 0, timezone.Location()) // 北京 5/27 07:00
 	if got := nextDailyResetTime(now); !got.Equal(want) {
 		t.Errorf("nextDailyResetTime = %v, want %v", got, want)
 	}
 }
 
-// TestNextWeeklyResetTime_FollowsServerTimezone 验证下次周重置 = 下周一北京 0 点。
+// TestNextWeeklyResetTime_FollowsServerTimezone 验证下次周重置 = 下周一北京 07:00。
 func TestNextWeeklyResetTime_FollowsServerTimezone(t *testing.T) {
 	if err := timezone.Init("Asia/Shanghai"); err != nil {
 		t.Fatalf("Init: %v", err)
@@ -126,7 +126,7 @@ func TestNextWeeklyResetTime_FollowsServerTimezone(t *testing.T) {
 
 	// 北京 2026-05-26（周二）→ 下周一是 2026-06-01
 	now := time.Date(2026, 5, 25, 23, 0, 0, 0, time.UTC) // 北京 5/26 07:00 周二
-	want := time.Date(2026, 6, 1, 0, 0, 0, 0, timezone.Location())
+	want := time.Date(2026, 6, 1, 7, 0, 0, 0, timezone.Location())
 	if got := nextWeeklyResetTime(now); !got.Equal(want) {
 		t.Errorf("nextWeeklyResetTime = %v, want %v", got, want)
 	}
