@@ -445,9 +445,15 @@ func conversationFilterFromQuery(c *gin.Context) (ConversationFilter, error) {
 		return ConversationFilter{}, err
 	}
 	filter := ConversationFilter{
+		RequestKind:  strings.TrimSpace(c.Query("request_kind")),
 		ReviewStatus: c.Query("review_status"), Decision: c.Query("decision"), GroupID: groupID,
 		UserID: userID, APIKeyID: apiKeyID, ConversationID: c.Query("conversation_id"),
 		RequestID: c.Query("request_id"), Keyword: c.Query("keyword"),
+	}
+	switch filter.RequestKind {
+	case "", conversationKindDialogue, conversationKindAuxiliary, conversationKindUnknown:
+	default:
+		return ConversationFilter{}, infraerrors.BadRequest("conversation_invalid_request_kind", "请求类型无效")
 	}
 	if value := strings.TrimSpace(c.Query("start_at")); value != "" {
 		filter.StartAt = parseTimeQuery(value)

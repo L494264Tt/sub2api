@@ -23,14 +23,36 @@ func (r *PostgreSQLRepository) RecordConversationCapture(ctx context.Context, ca
 	defer func() { _ = tx.Rollback() }()
 
 	sessionID := int64(0)
-	if capture.PreviousResponseID != "" {
+	capture.RequestDetails.Association = "request_id"
+	if capture.ExternalConversationID != "" {
+		capture.RequestDetails.Association = "client_id"
+	}
+	if capture.PreviousResponseID != "" && capture.ExternalConversationID == "" {
 		err = tx.QueryRowContext(ctx, `
-			SELECT id FROM conversation_review_sessions
-			WHERE last_response_id=$1 AND ($2::BIGINT IS NULL OR user_id=$2) AND ($3::BIGINT IS NULL OR api_key_id=$3)
-			ORDER BY last_turn_at DESC LIMIT 1 FOR UPDATE`, capture.PreviousResponseID,
+			SELECT s.id FROM conversation_review_sessions s
+			JOIN conversation_review_turns t ON t.session_id=s.id
+			WHERE t.upstream_response_id=$1 AND s.user_id=$2 AND s.api_key_id=$3
+			ORDER BY t.captured_at DESC LIMIT 1 FOR UPDATE OF s`, capture.PreviousResponseID,
 			nullableID(capture.Request.UserID), nullableID(capture.Request.APIKeyID)).Scan(&sessionID)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
+		}
+		if sessionID != 0 {
+			capture.RequestDetails.Association = "response_id"
+		}
+	}
+	if sessionID == 0 && capture.ExternalConversationID == "" && capture.PreviousResponseID == "" && capture.RequestDetails.ParentHistoryKey != "" {
+		err = tx.QueryRowContext(ctx, `SELECT CASE WHEN COUNT(DISTINCT session_id)=1 THEN MIN(session_id) ELSE 0 END
+			FROM conversation_review_turns WHERE history_key=$1 AND captured_at>NOW()-INTERVAL '1 day'`, capture.RequestDetails.ParentHistoryKey).Scan(&sessionID)
+		if err != nil {
+			return err
+		}
+		if sessionID != 0 {
+			var lockedID int64
+			if err := tx.QueryRowContext(ctx, `SELECT id FROM conversation_review_sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&lockedID); err != nil {
+				return err
+			}
+			capture.RequestDetails.Association = "history_match"
 		}
 	}
 	if sessionID == 0 {
@@ -55,16 +77,23 @@ func (r *PostgreSQLRepository) RecordConversationCapture(ctx context.Context, ca
 	}
 
 	var turnID int64
+	detailsJSON, err := json.Marshal(capture.RequestDetails)
+	if err != nil {
+		return err
+	}
+	if capture.RequestKind == "" {
+		capture.RequestKind = conversationKindUnknown
+	}
 	err = tx.QueryRowContext(ctx, `
 		INSERT INTO conversation_review_turns (
 			session_id,request_id,upstream_response_id,endpoint,protocol,model,request_transcript,model_response,
-			request_chars,response_chars,request_truncated,response_truncated,status_code,captured_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+			request_chars,response_chars,request_truncated,response_truncated,status_code,captured_at,request_kind,request_details,history_key
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17)
 		ON CONFLICT (request_id) WHERE request_id<>'' DO NOTHING
 		RETURNING id`, sessionID, capture.Request.RequestID, capture.UpstreamResponseID, capture.Request.Endpoint,
 		capture.Request.Protocol, capture.Request.Model, capture.RequestTranscript, capture.ModelResponse,
 		capture.RequestChars, capture.ResponseChars, capture.RequestTruncated, capture.ResponseTruncated,
-		capture.StatusCode, capture.CapturedAt.UTC()).Scan(&turnID)
+		capture.StatusCode, capture.CapturedAt.UTC(), capture.RequestKind, detailsJSON, capture.RequestDetails.HistoryKey).Scan(&turnID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return tx.Commit()
 	}
@@ -537,6 +566,11 @@ func buildConversationWhere(filter ConversationFilter) (string, []any) {
 		args = append(args, value)
 		clauses = append(clauses, fmt.Sprintf(format, len(args)))
 	}
+	if filter.RequestKind == conversationKindDialogue {
+		clauses = append(clauses, " AND EXISTS (SELECT 1 FROM conversation_review_turns t WHERE t.session_id=s.id AND t.request_kind IN ('conversation','unknown'))")
+	} else if filter.RequestKind != "" {
+		add(" AND EXISTS (SELECT 1 FROM conversation_review_turns t WHERE t.session_id=s.id AND t.request_kind=$%d)", filter.RequestKind)
+	}
 	if filter.GroupID != nil {
 		add(" AND s.group_id=$%d", *filter.GroupID)
 	}
@@ -589,7 +623,8 @@ func conversationSessionColumns(alias string) string {
 	return fmt.Sprintf(`%[1]s.id,%[1]s.external_conversation_id,%[1]s.user_id,%[1]s.username_snapshot,%[1]s.user_email_snapshot,
 		%[1]s.api_key_id,%[1]s.api_key_name_snapshot,%[1]s.group_id,%[1]s.group_name,%[1]s.provider,%[1]s.protocol,%[1]s.model,
 		%[1]s.turn_count,%[1]s.pending_review_count,%[1]s.flagged_turn_count,%[1]s.latest_review_decision,
-		%[1]s.started_at,%[1]s.last_turn_at,%[1]s.created_at,%[1]s.updated_at`, alias)
+		%[1]s.started_at,%[1]s.last_turn_at,%[1]s.created_at,%[1]s.updated_at,
+		COALESCE((SELECT t.request_details->>'user_preview' FROM conversation_review_turns t WHERE t.session_id=%[1]s.id AND t.request_kind='conversation' ORDER BY t.captured_at DESC,t.id DESC LIMIT 1),'')`, alias)
 }
 
 func conversationTurnColumns(alias string) string {
@@ -598,7 +633,7 @@ func conversationTurnColumns(alias string) string {
 		%[1]s.status_code,%[1]s.review_status,%[1]s.review_attempts,%[1]s.review_claim_version,%[1]s.review_started_at,%[1]s.reviewed_at,
 		%[1]s.review_decision,%[1]s.risk_level,%[1]s.action,%[1]s.categories,%[1]s.matched_scanners,%[1]s.scanner_scores,%[1]s.scanner_evidence,
 		%[1]s.scanner_backend,%[1]s.scanner_version,%[1]s.guard_endpoint_id,%[1]s.review_error_code,%[1]s.review_error_message,
-		%[1]s.captured_at,%[1]s.created_at,%[1]s.updated_at`, alias)
+		%[1]s.captured_at,%[1]s.created_at,%[1]s.updated_at,%[1]s.request_kind,%[1]s.request_details`, alias)
 }
 
 func conversationRunColumns(alias string) string {
@@ -613,7 +648,7 @@ func scanConversationSession(row rowScanner) (*ConversationSession, error) {
 	err := row.Scan(&session.ID, &session.ExternalConversationID, &userID, &session.UsernameSnapshot, &session.UserEmailSnapshot,
 		&apiKeyID, &session.APIKeyNameSnapshot, &groupID, &session.GroupName, &session.Provider, &session.Protocol, &session.Model,
 		&session.TurnCount, &session.PendingReviewCount, &session.FlaggedTurnCount, &session.LatestReviewDecision,
-		&session.StartedAt, &session.LastTurnAt, &session.CreatedAt, &session.UpdatedAt)
+		&session.StartedAt, &session.LastTurnAt, &session.CreatedAt, &session.UpdatedAt, &session.UserPreview)
 	if err != nil {
 		return nil, err
 	}
@@ -625,13 +660,17 @@ func scanConversationTurn(row rowScanner) (*ConversationTurn, error) {
 	turn := &ConversationTurn{}
 	var startedAt, reviewedAt sql.NullTime
 	var categories, matched, scores, evidence []byte
+	var detailsJSON []byte
 	err := row.Scan(&turn.ID, &turn.SessionID, &turn.RequestID, &turn.UpstreamResponseID, &turn.Endpoint, &turn.Protocol, &turn.Model,
 		&turn.RequestTranscript, &turn.ModelResponse, &turn.RequestChars, &turn.ResponseChars, &turn.RequestTruncated, &turn.ResponseTruncated,
 		&turn.StatusCode, &turn.ReviewStatus, &turn.ReviewAttempts, &turn.ReviewClaimVersion, &startedAt, &reviewedAt,
 		&turn.ReviewDecision, &turn.RiskLevel, &turn.Action, &categories, &matched, &scores, &evidence,
 		&turn.ScannerBackend, &turn.ScannerVersion, &turn.GuardEndpointID, &turn.ReviewErrorCode, &turn.ReviewErrorMessage,
-		&turn.CapturedAt, &turn.CreatedAt, &turn.UpdatedAt)
+		&turn.CapturedAt, &turn.CreatedAt, &turn.UpdatedAt, &turn.RequestKind, &detailsJSON)
 	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(detailsJSON, &turn.RequestDetails); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal(categories, &turn.Categories)

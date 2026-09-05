@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -14,6 +15,21 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestConversationArchiveUsesNativeClientSessionIdentifiers(t *testing.T) {
+	for _, header := range []string{"session-id", "X-Claude-Code-Session-Id", "X-Conversation-ID"} {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+		c.Request.Header.Set(header, "thread-example")
+		request := buildSecurityAuditRequest(c, nil, middleware2.AuthSubject{UserID: 1}, "anthropic_messages", "test", []byte(`{}`), "http")
+		require.Equal(t, "thread-example", request.ConversationID, header)
+	}
+	metadata, _ := json.Marshal(map[string]any{"metadata": map[string]string{"user_id": `{"device_id":"device","session_id":"claude-session"}`}})
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	request := buildSecurityAuditRequest(c, nil, middleware2.AuthSubject{UserID: 1}, "anthropic_messages", "test", metadata, "http")
+	require.Equal(t, "claude-session", request.ConversationID)
+}
 
 func TestCachesSecurityAuditCompletionSkipsWebSocketStages(t *testing.T) {
 	require.True(t, cachesSecurityAuditCompletion("http"))

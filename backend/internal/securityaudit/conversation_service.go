@@ -39,22 +39,28 @@ func (s *PromptService) RecordConversationTurn(ctx context.Context, request Requ
 	if !ok || !cfg.ConversationRecordingEnabled || !cfg.IncludesGroup(request.GroupID) {
 		return nil
 	}
-	requestText, err := conversationTranscript(request)
+	responseText := normalizeCapturedAssistantResponse(request.Protocol, contentType, responseBody, bufferTruncated)
+	details, requestKind, requestChars, requestTruncated, err := captureConversationMessages(request, responseText, cfg.ConversationRequestMaxRunes)
 	if errors.Is(err, ErrNoPromptText) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	responseText := normalizeCapturedAssistantResponse(request.Protocol, contentType, responseBody, bufferTruncated)
-	if strings.TrimSpace(responseText) == "" && !bufferTruncated {
+	details.ResponseContext, details.ResponseContextTruncated = captureConversationResponseContext(responseBody, cfg.ConversationResponseMaxRunes)
+	details.ResponseContextTruncated = details.ResponseContextTruncated || bufferTruncated
+	if strings.TrimSpace(responseText) == "" && !bufferTruncated && len(details.ResponseContext) == 0 {
 		return nil
 	}
-	requestText, requestChars, requestTruncated := trimConversationText(requestText, cfg.ConversationRequestMaxRunes)
+	requestText := conversationMessagesTranscript(details.Messages)
 	responseText, responseChars, responseTruncated := trimConversationText(responseText, cfg.ConversationResponseMaxRunes)
 	responseTruncated = responseTruncated || bufferTruncated
+	if responseTruncated {
+		details.HistoryKey = ""
+	}
 	externalID, previousResponseID, responseID := conversationIdentity(request, responseBody)
 	capture := conversationCapture{
+		RequestKind: requestKind, RequestDetails: details,
 		Request: request.Clone(), ConversationKey: conversationKey(request, externalID, previousResponseID),
 		ExternalConversationID: externalID, PreviousResponseID: previousResponseID, UpstreamResponseID: responseID,
 		RequestTranscript: requestText, ModelResponse: responseText, RequestChars: requestChars, ResponseChars: responseChars,
@@ -241,6 +247,12 @@ func (s *PromptService) processConversationReviewTurns(ctx context.Context, cfg 
 			return processed, flagged, failed, err
 		}
 		input := "User conversation:\n" + turn.RequestTranscript + "\n\nModel response:\n" + turn.ModelResponse
+		if len(turn.RequestDetails.Context) > 0 {
+			input += "\n\nRequest context:\n" + conversationMessagesTranscript(turn.RequestDetails.Context)
+		}
+		if len(turn.RequestDetails.ResponseContext) > 0 {
+			input += "\n\nModel tool output:\n" + conversationMessagesTranscript(turn.RequestDetails.ResponseContext)
+		}
 		chunks := SplitRunes(input, minimumInputLimit(endpoints))
 		started := s.clock.Now()
 		results := make([]*NormalizedResult, 0, len(chunks))

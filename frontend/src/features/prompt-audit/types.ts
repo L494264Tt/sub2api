@@ -270,6 +270,8 @@ export interface PromptLoadErrors {
 }
 
 export interface ConversationTurn {
+	request_kind?: 'conversation' | 'auxiliary' | 'unknown'
+	request_details?: ConversationRequestDetails
   id: number
   session_id: number
   request_id: string
@@ -303,6 +305,7 @@ export interface ConversationTurn {
 }
 
 export interface ConversationSession {
+  user_preview?: string
   id: number
   external_conversation_id: string
   user_id: number
@@ -325,6 +328,7 @@ export interface ConversationSession {
 }
 
 export interface ConversationFilters {
+	request_kind: string
   review_status: string
   decision: string
   group_id: string
@@ -335,6 +339,28 @@ export interface ConversationFilters {
   keyword: string
   start_at: string
   end_at: string
+}
+
+export interface ConversationMessage {
+  role: string
+  kind: string
+  content: string
+  position: number
+  truncated: boolean
+}
+
+export interface ConversationRequestDetails {
+  association?: string
+  version: number
+  messages: ConversationMessage[]
+  context: ConversationMessage[]
+  current_message_position: number
+  omitted_messages: number
+  omitted_context: number
+  context_truncated: boolean
+  response_context?: ConversationMessage[]
+  response_context_truncated?: boolean
+  classification_reason?: string
 }
 
 export interface ConversationPage {

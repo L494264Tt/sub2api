@@ -99,10 +99,31 @@ func TestTruncatedResponseIsArchivedEvenWithoutRecoverableText(t *testing.T) {
 	}}}
 	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO conversation_review_sessions").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(7))
-	mock.ExpectQuery("INSERT INTO conversation_review_turns").WithArgs(int64(7), "request-1", "", "", "openai_chat", "", "[user]\nhello", "", 12, 0, false, true, 200, sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(8))
+	mock.ExpectQuery("INSERT INTO conversation_review_turns").WithArgs(int64(7), "request-1", "", "", "openai_chat", "", "[user]\nhello", "", 5, 0, false, true, 200, sqlmock.AnyArg(), "conversation", sqlmock.AnyArg(), "").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(8))
 	mock.ExpectExec("UPDATE conversation_review_sessions SET").WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 	err = service.RecordConversationTurn(context.Background(), Request{RequestID: "request-1", Protocol: "openai_chat", Body: []byte(`{"messages":[{"role":"user","content":"hello"}]}`)}, 200, "application/json", []byte(`{"id":`), true)
 	require.NoError(t, err)
 	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestConversationHistoryAssociationUsesOnlyUnambiguousMatch(t *testing.T) {
+	for _, matchedID := range []int64{0, 7} {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		mock.ExpectBegin()
+		mock.ExpectQuery("SELECT CASE WHEN COUNT\\(DISTINCT session_id\\)=1 THEN MIN\\(session_id\\) ELSE 0 END").WithArgs("history-key").WillReturnRows(sqlmock.NewRows([]string{"session_id"}).AddRow(matchedID))
+		if matchedID == 0 {
+			mock.ExpectQuery("INSERT INTO conversation_review_sessions").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(11))
+		} else {
+			mock.ExpectQuery("SELECT id FROM conversation_review_sessions WHERE id=\\$1 FOR UPDATE").WithArgs(matchedID).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(matchedID))
+		}
+		mock.ExpectQuery("INSERT INTO conversation_review_turns").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(22))
+		mock.ExpectExec("UPDATE conversation_review_sessions SET").WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectCommit()
+		err = NewPostgreSQLRepository(db).RecordConversationCapture(context.Background(), conversationCapture{RequestKind: conversationKindDialogue, RequestDetails: ConversationRequestDetails{ParentHistoryKey: "history-key"}, CapturedAt: time.Now()})
+		require.NoError(t, err)
+		require.NoError(t, mock.ExpectationsWereMet())
+		db.Close()
+	}
 }
