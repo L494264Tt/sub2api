@@ -86,6 +86,7 @@ import promptAuditAPI from '../api'
 import ConversationTurnDetail from './ConversationTurnDetail.vue'
 import ConversationReadingView from './ConversationReadingView.vue'
 import { buildConversationTimeline } from '../conversationTimeline'
+import { isOpenClawTurn } from '../conversationReading'
 import type { ConversationFilters, ConversationPage, ConversationSession } from '../types'
 import { cloneData, emptyConversationFilters } from '../viewModel'
 
@@ -110,7 +111,7 @@ async function load() {
 }
 function search() { applied.value = cloneData(filters); page.page = 1; void load() }
 function changePage(value: number) { page.page = value; void load() }
-async function open(id: number) { detailOpen.value = true; detailLoading.value = true; viewMode.value = 'reading'; try { detail.value = await promptAuditAPI.getConversation(id); if (detail.value.turns?.every(turn => turn.request_kind === 'auxiliary')) viewMode.value = 'requests' } catch { close(); appStore.showError(t('admin.promptAudit.errors.loadConversationDetail')) } finally { detailLoading.value = false } }
+async function open(id: number) { detailOpen.value = true; detailLoading.value = true; viewMode.value = 'reading'; try { detail.value = await promptAuditAPI.getConversation(id); if (detail.value.turns?.every(turn => turn.request_kind === 'auxiliary') && !detail.value.turns?.some(isOpenClawTurn)) viewMode.value = 'requests' } catch { close(); appStore.showError(t('admin.promptAudit.errors.loadConversationDetail')) } finally { detailLoading.value = false } }
 function close() { detailOpen.value = false; detail.value = null }
 async function remove(id: number) { if (!window.confirm(t('admin.promptAudit.conversations.deleteConfirm'))) return; try { await promptAuditAPI.deleteConversation(id); appStore.showSuccess(t('admin.promptAudit.conversations.deleted')); await load() } catch { appStore.showError(t('admin.promptAudit.errors.deleteConversation')) } }
 function formatDate(value: string) { return new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) }

@@ -4,6 +4,16 @@ const contextTags = ['environment_context', 'skills_instructions', 'skill', 'per
 const suggestionCheckPrefix = 'You are an expert at upholding safety and compliance standards for Codex ambient suggestions.'
 const actionReviewPrefix = 'You are judging one planned coding-agent action.'
 
+export function isOpenClawHeartbeat(turn: ConversationTurn): boolean {
+  const lastUser = (turn.request_details?.messages || []).filter(message => message.role === 'user').at(-1)
+  return /^\[[^\n]+\] \[OpenClaw heartbeat poll\]$/.test(lastUser?.content.trim() || '')
+}
+
+export function isOpenClawTurn(turn: ConversationTurn): boolean {
+  return isOpenClawHeartbeat(turn) || Boolean(turn.request_details?.context?.some(message =>
+    message.role === 'system' && message.content.trim().startsWith('You are a personal assistant running inside OpenClaw.')))
+}
+
 // Presentation-only cleanup: the original request remains in Per request.
 // Match complete, anchored client envelopes; never remove a quoted tag or an
 // incomplete block whose remaining text may contain the user's actual request.
@@ -39,7 +49,7 @@ export function isAuxiliaryTurn(turn: ConversationTurn): boolean {
       if (['allow', 'deny'].includes(result.outcome)) return true
     } catch { /* Keep unrecognized outputs in the dialogue. */ }
   }
-  if (turn.model_response.trim() === 'HEARTBEAT_OK' && /^\[[^\n]+\] \[OpenClaw heartbeat poll\]$/.test(users.at(-1)?.content.trim() || '')) return true
+  if (turn.model_response.trim() === 'HEARTBEAT_OK' && isOpenClawHeartbeat(turn)) return true
   if (users.some(message => message.content.trim().startsWith(suggestionCheckPrefix))) {
     try {
       const result = JSON.parse(turn.model_response)

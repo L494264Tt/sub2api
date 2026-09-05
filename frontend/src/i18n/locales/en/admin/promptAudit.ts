@@ -55,6 +55,12 @@ export default {
       searchGroups: 'Search groups', noGroups: 'No matching groups', missingGroups: 'Configured IDs for groups that no longer exist', selectedCount: '{count} groups selected',
       scanners: 'Qwen3Guard input-risk categories', workerCount: 'Worker count', queueCapacity: 'Persistent queue capacity', strategy: 'Node strategy', strategyHint: 'Try nodes in configuration order and fail over when allowed.',
     },
+    openClaw: {
+      title: 'OpenClaw activity', trigger: 'Trigger', heartbeat: 'Routine heartbeat check', modelRequest: 'Model request', receipt: 'Model receipt', acknowledged: 'Heartbeat acknowledged',
+      requestedTools: 'Tools requested by this response', noCalls: 'No tool call recorded for this request', partialCalls: 'Only argument fragments were saved; the full call is unknown',
+      heartbeatMeaning: 'This is a periodic check acknowledgement, not evidence that a business task ran or completed.',
+      requestNotCompletion: 'These names indicate requested calls, not confirmed successful execution.', incomplete: 'Output was truncated; tool records may be incomplete.', history: 'View {count} recorded activities',
+    },
     conversations: {
       dialogueHistory: 'Expand conversation history',
       readingView: 'Reading view', taskOriginal: 'Initial user request', latestReply: 'Latest reply', progressRecords: 'Expand {count} progress messages',

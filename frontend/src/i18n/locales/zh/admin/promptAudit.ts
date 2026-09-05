@@ -55,6 +55,12 @@ export default {
       searchGroups: '搜索分组', noGroups: '没有匹配分组', missingGroups: '配置中包含已删除的分组 ID', selectedCount: '已选择 {count} 个分组',
       scanners: 'Qwen3Guard 输入风险分类', workerCount: 'Worker 数量', queueCapacity: '持久队列容量', strategy: '节点策略', strategyHint: '按配置顺序优先尝试，必要时故障切换。',
     },
+    openClaw: {
+      title: 'OpenClaw 活动', trigger: '触发类型', heartbeat: '例行心跳检查', modelRequest: '模型请求', receipt: '模型回执', acknowledged: '已返回心跳回执',
+      requestedTools: '本次模型请求的工具', noCalls: '未记录到本次工具调用', partialCalls: '仅保存了工具参数片段，无法识别完整调用',
+      heartbeatMeaning: '这条记录是周期检查回执，不代表某项业务任务已经执行或完成。',
+      requestNotCompletion: '工具名称表示模型请求调用，不能据此确认工具已执行成功。', incomplete: '本次输出存在截断，工具记录可能不完整。', history: '查看 {count} 次已记录活动',
+    },
     conversations: {
       dialogueHistory: '展开对话经过',
       readingView: '阅读视图', taskOriginal: '用户最初的任务', latestReply: '最近回复', progressRecords: '展开 {count} 条过程记录',
