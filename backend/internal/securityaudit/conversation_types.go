@@ -22,6 +22,7 @@ type ConversationRecorder interface {
 }
 
 type ConversationSession struct {
+	UserPreview            string              `json:"user_preview"`
 	ID                     int64               `json:"id"`
 	ExternalConversationID string              `json:"external_conversation_id"`
 	UserID                 int64               `json:"user_id"`
@@ -46,40 +47,42 @@ type ConversationSession struct {
 }
 
 type ConversationTurn struct {
-	ID                 int64              `json:"id"`
-	SessionID          int64              `json:"session_id"`
-	RequestID          string             `json:"request_id"`
-	UpstreamResponseID string             `json:"upstream_response_id"`
-	Endpoint           string             `json:"endpoint"`
-	Protocol           string             `json:"protocol"`
-	Model              string             `json:"model"`
-	RequestTranscript  string             `json:"request_transcript"`
-	ModelResponse      string             `json:"model_response"`
-	RequestChars       int                `json:"request_chars"`
-	ResponseChars      int                `json:"response_chars"`
-	RequestTruncated   bool               `json:"request_truncated"`
-	ResponseTruncated  bool               `json:"response_truncated"`
-	StatusCode         int                `json:"status_code"`
-	ReviewStatus       string             `json:"review_status"`
-	ReviewAttempts     int                `json:"review_attempts"`
-	ReviewClaimVersion int64              `json:"-"`
-	ReviewStartedAt    *time.Time         `json:"review_started_at,omitempty"`
-	ReviewedAt         *time.Time         `json:"reviewed_at,omitempty"`
-	ReviewDecision     string             `json:"review_decision"`
-	RiskLevel          string             `json:"risk_level"`
-	Action             string             `json:"action"`
-	Categories         []string           `json:"categories"`
-	MatchedScanners    []string           `json:"matched_scanners"`
-	ScannerScores      map[string]float64 `json:"scanner_scores"`
-	ScannerEvidence    map[string]string  `json:"scanner_evidence"`
-	ScannerBackend     string             `json:"scanner_backend"`
-	ScannerVersion     string             `json:"scanner_version"`
-	GuardEndpointID    string             `json:"guard_endpoint_id"`
-	ReviewErrorCode    string             `json:"review_error_code"`
-	ReviewErrorMessage string             `json:"review_error_message"`
-	CapturedAt         time.Time          `json:"captured_at"`
-	CreatedAt          time.Time          `json:"created_at"`
-	UpdatedAt          time.Time          `json:"updated_at"`
+	ID                 int64                      `json:"id"`
+	SessionID          int64                      `json:"session_id"`
+	RequestID          string                     `json:"request_id"`
+	UpstreamResponseID string                     `json:"upstream_response_id"`
+	Endpoint           string                     `json:"endpoint"`
+	Protocol           string                     `json:"protocol"`
+	Model              string                     `json:"model"`
+	RequestKind        string                     `json:"request_kind"`
+	RequestDetails     ConversationRequestDetails `json:"request_details"`
+	RequestTranscript  string                     `json:"request_transcript"`
+	ModelResponse      string                     `json:"model_response"`
+	RequestChars       int                        `json:"request_chars"`
+	ResponseChars      int                        `json:"response_chars"`
+	RequestTruncated   bool                       `json:"request_truncated"`
+	ResponseTruncated  bool                       `json:"response_truncated"`
+	StatusCode         int                        `json:"status_code"`
+	ReviewStatus       string                     `json:"review_status"`
+	ReviewAttempts     int                        `json:"review_attempts"`
+	ReviewClaimVersion int64                      `json:"-"`
+	ReviewStartedAt    *time.Time                 `json:"review_started_at,omitempty"`
+	ReviewedAt         *time.Time                 `json:"reviewed_at,omitempty"`
+	ReviewDecision     string                     `json:"review_decision"`
+	RiskLevel          string                     `json:"risk_level"`
+	Action             string                     `json:"action"`
+	Categories         []string                   `json:"categories"`
+	MatchedScanners    []string                   `json:"matched_scanners"`
+	ScannerScores      map[string]float64         `json:"scanner_scores"`
+	ScannerEvidence    map[string]string          `json:"scanner_evidence"`
+	ScannerBackend     string                     `json:"scanner_backend"`
+	ScannerVersion     string                     `json:"scanner_version"`
+	GuardEndpointID    string                     `json:"guard_endpoint_id"`
+	ReviewErrorCode    string                     `json:"review_error_code"`
+	ReviewErrorMessage string                     `json:"review_error_message"`
+	CapturedAt         time.Time                  `json:"captured_at"`
+	CreatedAt          time.Time                  `json:"created_at"`
+	UpdatedAt          time.Time                  `json:"updated_at"`
 }
 
 type ConversationRun struct {
@@ -101,6 +104,7 @@ type ConversationRun struct {
 }
 
 type ConversationFilter struct {
+	RequestKind    string     `json:"request_kind,omitempty"`
 	ReviewStatus   string     `json:"review_status,omitempty"`
 	Decision       string     `json:"decision,omitempty"`
 	GroupID        *int64     `json:"group_id,omitempty"`
@@ -135,6 +139,8 @@ type ConversationDeleteResult struct {
 }
 
 type conversationCapture struct {
+	RequestKind            string
+	RequestDetails         ConversationRequestDetails
 	Request                Request
 	ConversationKey        string
 	ExternalConversationID string
@@ -148,4 +154,29 @@ type conversationCapture struct {
 	ResponseTruncated      bool
 	StatusCode             int
 	CapturedAt             time.Time
+}
+
+type ConversationMessage struct {
+	Role      string `json:"role"`
+	Kind      string `json:"kind"`
+	Content   string `json:"content"`
+	Position  int    `json:"position"`
+	Truncated bool   `json:"truncated"`
+}
+
+type ConversationRequestDetails struct {
+	UserPreview              string                `json:"user_preview,omitempty"`
+	Association              string                `json:"association,omitempty"`
+	HistoryKey               string                `json:"-"`
+	ParentHistoryKey         string                `json:"-"`
+	Version                  int                   `json:"version"`
+	Messages                 []ConversationMessage `json:"messages"`
+	Context                  []ConversationMessage `json:"context"`
+	CurrentMessagePosition   int                   `json:"current_message_position"`
+	OmittedMessages          int                   `json:"omitted_messages"`
+	OmittedContext           int                   `json:"omitted_context"`
+	ContextTruncated         bool                  `json:"context_truncated"`
+	ResponseContext          []ConversationMessage `json:"response_context"`
+	ResponseContextTruncated bool                  `json:"response_context_truncated"`
+	ClassificationReason     string                `json:"classification_reason,omitempty"`
 }

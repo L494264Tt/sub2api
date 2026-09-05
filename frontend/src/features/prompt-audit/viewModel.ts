@@ -123,6 +123,7 @@ export function emptyEventFilters(): PromptEventFilters {
 
 export function emptyConversationFilters(): ConversationFilters {
   return {
+	request_kind: 'conversation',
     review_status: '', decision: '', group_id: '', user_id: '', api_key_id: '',
     conversation_id: '', request_id: '', keyword: '', start_at: '', end_at: '',
   }
@@ -130,7 +131,7 @@ export function emptyConversationFilters(): ConversationFilters {
 
 export function conversationQueryParams(filters: ConversationFilters): Record<string, string | number> {
   const result: Record<string, string | number> = {}
-  for (const key of ['review_status', 'decision', 'conversation_id', 'request_id', 'keyword'] as const) {
+  for (const key of ['request_kind', 'review_status', 'decision', 'conversation_id', 'request_id', 'keyword'] as const) {
     const value = filters[key].trim()
     if (value) result[key] = value
   }

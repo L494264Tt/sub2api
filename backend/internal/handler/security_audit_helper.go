@@ -2,6 +2,7 @@ package handler
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -167,6 +168,21 @@ func buildSecurityAuditRequest(c *gin.Context, apiKey *service.APIKey, subject m
 		GroupName: legacy.GroupName, Provider: legacy.Provider, Endpoint: legacy.Endpoint,
 		Protocol: legacy.Protocol, Model: legacy.Model, Body: body, Stage: strings.TrimSpace(stage),
 		ConversationID: strings.TrimSpace(c.GetHeader("X-Conversation-ID")),
+	}
+	if request.ConversationID == "" {
+		request.ConversationID = service.ExtractClientSessionID(c)
+	}
+	if request.ConversationID == "" {
+		var metadata struct {
+			Metadata struct {
+				UserID string `json:"user_id"`
+			} `json:"metadata"`
+		}
+		if json.Unmarshal(body, &metadata) == nil {
+			if parsed := service.ParseMetadataUserID(metadata.Metadata.UserID); parsed != nil {
+				request.ConversationID = parsed.SessionID
+			}
+		}
 	}
 	if apiKey != nil && apiKey.User != nil {
 		request.Username = apiKey.User.Username
