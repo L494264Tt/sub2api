@@ -1,6 +1,7 @@
 <template>
   <div class="space-y-6" data-test="reading-view">
-    <p v-if="!groups.some(group => group.question)" class="text-sm text-gray-500">{{ t('admin.promptAudit.conversations.noReadableDialogue') }}</p>
+    <OpenClawActivity :activities="openClawActivities" />
+    <p v-if="!groups.some(group => group.question) && !openClawActivities.length" class="text-sm text-gray-500">{{ t('admin.promptAudit.conversations.noReadableDialogue') }}</p>
     <div v-else-if="groups.some(group => group.question)" class="border-b border-gray-200 pb-5 dark:border-dark-700">
       <h3 class="text-sm font-semibold text-gray-600 dark:text-dark-300">{{ t('admin.promptAudit.conversations.taskOriginal') }}</h3>
       <p class="mt-2 whitespace-pre-wrap break-words text-base leading-7 text-gray-900 dark:text-white [overflow-wrap:anywhere]">{{ groups.find(group => group.question)?.question?.content }}</p>
@@ -44,9 +45,12 @@ import { useI18n } from 'vue-i18n'
 import { buildConversationTimeline } from '../conversationTimeline'
 import { isAuxiliaryTurn, readingResponse } from '../conversationReading'
 import ConversationMessage from './ConversationMessage.vue'
+import OpenClawActivity from './OpenClawActivity.vue'
+import { buildOpenClawActivity } from '../openClawActivity'
 import type { ConversationMessage as Message, ConversationTurn } from '../types'
 const props = defineProps<{ turns: ConversationTurn[] }>()
 const { t } = useI18n()
+const openClawActivities = computed(() => buildOpenClawActivity(props.turns))
 const groups = computed(() => {
   const result: { question?: Message; replies: Message[] }[] = []
   for (const entry of buildConversationTimeline(props.turns)) {

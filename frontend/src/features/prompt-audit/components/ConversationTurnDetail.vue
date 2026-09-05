@@ -6,7 +6,7 @@
     </div>
     <p v-if="turn.request_truncated || turn.response_truncated" role="status" class="mt-3 text-sm text-amber-700 dark:text-amber-300">{{ t('admin.promptAudit.conversations.truncated') }}</p>
     <p v-if="!structured" class="mt-3 text-sm text-amber-700 dark:text-amber-300" data-test="legacy-note">{{ t('admin.promptAudit.conversations.legacyNote') }}</p>
-    <p v-if="auxiliary" class="mt-3 text-sm text-amber-700 dark:text-amber-300">{{ t('admin.promptAudit.conversations.auxiliaryNote') }}</p>
+    <p v-if="auxiliary" class="mt-3 text-sm text-amber-700 dark:text-amber-300">{{ t(isOpenClawHeartbeat(turn) ? 'admin.promptAudit.openClaw.heartbeatMeaning' : 'admin.promptAudit.conversations.auxiliaryNote') }}</p>
     <p v-if="turn.request_details?.association === 'history_match'" class="mt-2 text-xs text-gray-500">{{ t('admin.promptAudit.conversations.historyMatched') }}</p>
     <p v-else-if="turn.request_details?.association === 'request_id'" class="mt-2 text-xs text-gray-500">{{ t('admin.promptAudit.conversations.unlinked') }}</p>
 
@@ -48,6 +48,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ConversationMessage from './ConversationMessage.vue'
+import { isOpenClawHeartbeat } from '../conversationReading'
 import type { ConversationTurn, ConversationMessage as Message } from '../types'
 const props = defineProps<{ turn: ConversationTurn; timelineMessages?: Message[] }>()
 const { t, locale } = useI18n()
