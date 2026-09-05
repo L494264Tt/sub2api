@@ -61,11 +61,13 @@
         <div v-if="detailLoading" class="py-12 text-center text-gray-500">{{ t('common.loading') }}</div>
         <div v-else-if="detail" class="mt-5 space-y-6">
           <div class="flex flex-wrap gap-2" role="tablist" :aria-label="t('admin.promptAudit.conversations.viewMode')">
+            <button type="button" role="tab" :aria-selected="viewMode === 'reading'" class="border-b-2 px-3 py-2 text-sm" :class="viewMode === 'reading' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500'" @click="viewMode = 'reading'">{{ t('admin.promptAudit.conversations.readingView') }}</button>
             <button type="button" role="tab" :aria-selected="viewMode === 'dialogue'" class="border-b-2 px-3 py-2 text-sm" :class="viewMode === 'dialogue' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500'" @click="viewMode = 'dialogue'">{{ t('admin.promptAudit.conversations.fullConversation') }}</button>
             <button type="button" role="tab" :aria-selected="viewMode === 'requests'" class="border-b-2 px-3 py-2 text-sm" :class="viewMode === 'requests' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500'" @click="viewMode = 'requests'">{{ t('admin.promptAudit.conversations.perRequest') }}</button>
           </div>
-          <div class="grid gap-3 text-sm sm:grid-cols-3"><div><span class="text-gray-500">ID</span><p>{{ detail.external_conversation_id || `#${detail.id}` }}</p></div><div><span class="text-gray-500">{{ t('admin.promptAudit.events.identity') }}</span><p>{{ detail.username }} · {{ detail.api_key_name }}</p></div><div><span class="text-gray-500">{{ t('admin.promptAudit.events.route') }}</span><p>{{ detail.protocol }} · {{ detail.model }}</p></div></div>
-          <template v-if="viewMode === 'dialogue'">
+          <div v-if="viewMode !== 'reading'" class="grid gap-3 text-sm sm:grid-cols-3"><div><span class="text-gray-500">ID</span><p>{{ detail.external_conversation_id || `#${detail.id}` }}</p></div><div><span class="text-gray-500">{{ t('admin.promptAudit.events.identity') }}</span><p>{{ detail.username }} · {{ detail.api_key_name }}</p></div><div><span class="text-gray-500">{{ t('admin.promptAudit.events.route') }}</span><p>{{ detail.protocol }} · {{ detail.model }}</p></div></div>
+          <ConversationReadingView v-if="viewMode === 'reading'" :turns="detail.turns || []" />
+          <template v-else-if="viewMode === 'dialogue'">
             <p v-if="!timeline.length" class="text-sm text-gray-500">{{ t('admin.promptAudit.conversations.onlyAuxiliary') }}</p>
             <ConversationTurnDetail v-for="entry in timeline" :key="entry.turn.id" :turn="entry.turn" :timeline-messages="entry.messages" />
           </template>
@@ -82,6 +84,7 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import promptAuditAPI from '../api'
 import ConversationTurnDetail from './ConversationTurnDetail.vue'
+import ConversationReadingView from './ConversationReadingView.vue'
 import { buildConversationTimeline } from '../conversationTimeline'
 import type { ConversationFilters, ConversationPage, ConversationSession } from '../types'
 import { cloneData, emptyConversationFilters } from '../viewModel'
@@ -96,7 +99,7 @@ const error = ref('')
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detail = ref<ConversationSession | null>(null)
-const viewMode = ref<'dialogue' | 'requests'>('dialogue')
+const viewMode = ref<'reading' | 'dialogue' | 'requests'>('reading')
 const timeline = computed(() => buildConversationTimeline(detail.value?.turns || []))
 
 async function load() {
@@ -107,7 +110,7 @@ async function load() {
 }
 function search() { applied.value = cloneData(filters); page.page = 1; void load() }
 function changePage(value: number) { page.page = value; void load() }
-async function open(id: number) { detailOpen.value = true; detailLoading.value = true; viewMode.value = 'dialogue'; try { detail.value = await promptAuditAPI.getConversation(id); if (detail.value.turns?.every(turn => turn.request_kind === 'auxiliary')) viewMode.value = 'requests' } catch { close(); appStore.showError(t('admin.promptAudit.errors.loadConversationDetail')) } finally { detailLoading.value = false } }
+async function open(id: number) { detailOpen.value = true; detailLoading.value = true; viewMode.value = 'reading'; try { detail.value = await promptAuditAPI.getConversation(id); if (detail.value.turns?.every(turn => turn.request_kind === 'auxiliary')) viewMode.value = 'requests' } catch { close(); appStore.showError(t('admin.promptAudit.errors.loadConversationDetail')) } finally { detailLoading.value = false } }
 function close() { detailOpen.value = false; detail.value = null }
 async function remove(id: number) { if (!window.confirm(t('admin.promptAudit.conversations.deleteConfirm'))) return; try { await promptAuditAPI.deleteConversation(id); appStore.showSuccess(t('admin.promptAudit.conversations.deleted')); await load() } catch { appStore.showError(t('admin.promptAudit.errors.deleteConversation')) } }
 function formatDate(value: string) { return new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) }

@@ -56,6 +56,10 @@ export default {
       scanners: 'Qwen3Guard 输入风险分类', workerCount: 'Worker 数量', queueCapacity: '持久队列容量', strategy: '节点策略', strategyHint: '按配置顺序优先尝试，必要时故障切换。',
     },
     conversations: {
+      dialogueHistory: '展开对话经过',
+      readingView: '阅读视图', taskOriginal: '用户最初的任务', latestReply: '最近回复', progressRecords: '展开 {count} 条过程记录',
+      userMessageCount: '{count} 条用户消息', toolRequestCount: '{count} 次含工具活动的请求', noReplyYet: '尚无已记录的文本回复。',
+      noReadableDialogue: '没有可识别的普通对话，请在逐次请求中查看原始记录。', readingGaps: '部分记录属于旧版或存在截断，当前视图不保证包含全部历史内容。',
       viewMode: '查看方式', fullConversation: '完整对话', perRequest: '逐次请求', onlyAuxiliary: '此会话只有辅助请求，请切换到“逐次请求”查看。',
       historyMatched: '这一轮通过相同用户和 API Key 的历史消息匹配关联。', unlinked: '客户端未提供可关联的会话标识，目前按单次请求归档；下方保留请求携带的对话历史。',
       requestKind: '请求类型', kinds: { conversation: '对话（含未分类记录）', auxiliary: '疑似辅助请求', unknown: '未分类 / 旧版记录' },
