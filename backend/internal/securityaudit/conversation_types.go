@@ -18,7 +18,7 @@ type ConversationCaptureSettings struct {
 
 type ConversationRecorder interface {
 	ConversationCaptureSettings(groupID *int64) ConversationCaptureSettings
-	EnqueueConversationTurn(request Request, statusCode int, contentType string, responseBody []byte)
+	EnqueueConversationTurn(request Request, statusCode int, contentType string, responseBody []byte, responseTruncated bool)
 }
 
 type ConversationSession struct {

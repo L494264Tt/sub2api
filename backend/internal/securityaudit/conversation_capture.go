@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"strings"
 	"unicode/utf8"
 )
@@ -37,37 +38,75 @@ func conversationKey(request Request, externalID, previousResponseID string) str
 }
 
 func normalizeAssistantResponse(protocol string, body []byte) string {
+	return normalizeCapturedAssistantResponse(protocol, "", body, false)
+}
+
+func normalizeCapturedAssistantResponse(protocol, contentType string, body []byte, truncated bool) string {
 	protocol = strings.ToLower(strings.TrimSpace(protocol))
 	trimmed := strings.TrimSpace(string(body))
 	if trimmed == "" {
 		return ""
 	}
-	if strings.Contains(trimmed, "data:") || strings.Contains(trimmed, "event:") {
-		return normalizeSSEResponse(protocol, []byte(trimmed))
-	}
 	var root map[string]any
-	if json.Unmarshal(body, &root) != nil {
+	if json.Unmarshal(body, &root) == nil {
+		return strings.Join(responseTexts(protocol, root), "\n")
+	}
+	if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+		if truncated {
+			root, _ := decodeConversationJSONPrefix(body).(map[string]any)
+			return strings.Join(responseTexts(protocol, root), "\n")
+		}
 		return ""
 	}
-	return strings.TrimSpace(strings.Join(responseTexts(protocol, root), "\n"))
+	if strings.Contains(strings.ToLower(contentType), "text/event-stream") ||
+		strings.HasPrefix(trimmed, "data:") || strings.HasPrefix(trimmed, "event:") || strings.HasPrefix(trimmed, ":") {
+		return normalizeSSEResponse(protocol, body, truncated)
+	}
+	return ""
 }
 
-func normalizeSSEResponse(protocol string, body []byte) string {
+func conversationTranscript(request Request) (string, error) {
+	var document any
+	if err := json.Unmarshal(request.Body, &document); err != nil {
+		return "", errors.New("conversation request JSON is invalid")
+	}
+	segments := extractProtocolSegments(request.Protocol, document)
+	parts := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		if strings.TrimSpace(segment.text) == "" {
+			continue
+		}
+		role := segment.role
+		if role == "" {
+			role = "user"
+		}
+		parts = append(parts, "["+role+"]\n"+segment.text)
+	}
+	if len(parts) == 0 {
+		return "", ErrNoPromptText
+	}
+	return strings.Join(parts, "\n\n"), nil
+}
+
+func normalizeSSEResponse(protocol string, body []byte, truncated bool) string {
 	frames := strings.FieldsFunc(string(body), func(r rune) bool { return r == '\n' || r == '\r' })
 	deltas := make([]string, 0, len(frames))
 	final := ""
-	for _, line := range frames {
-		line = strings.TrimSpace(line)
+	for index, line := range frames {
+		line = strings.TrimLeft(line, " \t")
 		if !strings.HasPrefix(line, "data:") {
 			continue
 		}
-		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if payload == "" || payload == "[DONE]" {
+		payload := strings.TrimLeft(strings.TrimPrefix(line, "data:"), " \t")
+		if strings.TrimSpace(payload) == "" || strings.TrimSpace(payload) == "[DONE]" {
 			continue
 		}
 		var root map[string]any
 		if json.Unmarshal([]byte(payload), &root) != nil {
-			continue
+			if !truncated || index != len(frames)-1 {
+				continue
+			}
+			root, _ = decodeConversationJSONPrefix([]byte(payload)).(map[string]any)
 		}
 		texts := responseTexts(protocol, root)
 		if isIncrementalResponse(protocol, root) {
@@ -77,9 +116,9 @@ func normalizeSSEResponse(protocol string, body []byte) string {
 		}
 	}
 	if len(deltas) > 0 {
-		return strings.TrimSpace(strings.Join(deltas, ""))
+		return strings.Join(deltas, "")
 	}
-	return strings.TrimSpace(final)
+	return final
 }
 
 func isIncrementalResponse(protocol string, root map[string]any) bool {
@@ -103,11 +142,7 @@ func responseTexts(protocol string, root map[string]any) []string {
 	}
 	result := make([]string, 0, 4)
 	appendText := func(value any) {
-		for _, text := range contentTexts(value) {
-			if text = strings.TrimSpace(text); text != "" {
-				result = append(result, text)
-			}
-		}
+		result = append(result, responseContentTexts(value)...)
 	}
 	if value, ok := root["output_text"].(string); ok && strings.TrimSpace(value) != "" {
 		return []string{value}
@@ -153,6 +188,29 @@ func responseTexts(protocol string, root map[string]any) []string {
 	return result
 }
 
+// Unlike prompt normalization, response chunks must retain whitespace: a space
+// or newline can be an entire streaming delta.
+func responseContentTexts(value any) []string {
+	switch value := value.(type) {
+	case string:
+		return []string{value}
+	case []any:
+		var result []string
+		for _, item := range value {
+			result = append(result, responseContentTexts(item)...)
+		}
+		return result
+	case map[string]any:
+		switch jsonString(value, "type") {
+		case "", "text", "input_text", "output_text":
+			if text, ok := value["text"].(string); ok {
+				return []string{text}
+			}
+		}
+	}
+	return nil
+}
+
 func responseObjectID(body []byte) string {
 	var root map[string]any
 	if json.Unmarshal(body, &root) != nil {
@@ -185,7 +243,7 @@ func responseObjectID(body []byte) string {
 }
 
 func trimConversationText(value string, limit int) (string, int, bool) {
-	value = strings.ReplaceAll(strings.TrimSpace(value), "\x00", "")
+	value = strings.ReplaceAll(value, "\x00", "")
 	count := utf8.RuneCountInString(value)
 	if limit <= 0 || count <= limit {
 		return value, count, false

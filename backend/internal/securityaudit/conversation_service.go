@@ -8,7 +8,12 @@ import (
 	"unicode/utf8"
 )
 
-const conversationCleanupInterval = time.Hour
+const (
+	conversationCleanupInterval         = time.Hour
+	conversationReviewLeaseDuration     = 10 * time.Minute
+	conversationReviewHeartbeatInterval = 30 * time.Second
+	conversationReviewDBTimeout         = 5 * time.Second
+)
 
 func (s *PromptService) ConversationCaptureSettings(groupID *int64) ConversationCaptureSettings {
 	if s == nil || s.config == nil {
@@ -26,7 +31,7 @@ func (s *PromptService) ConversationCaptureSettings(groupID *int64) Conversation
 	return ConversationCaptureSettings{Enabled: true, ResponseMaxBytes: limit}
 }
 
-func (s *PromptService) RecordConversationTurn(ctx context.Context, request Request, statusCode int, contentType string, responseBody []byte) error {
+func (s *PromptService) RecordConversationTurn(ctx context.Context, request Request, statusCode int, contentType string, responseBody []byte, bufferTruncated bool) error {
 	if s == nil || s.config == nil || s.repo == nil || statusCode < 200 || statusCode >= 300 {
 		return nil
 	}
@@ -34,20 +39,20 @@ func (s *PromptService) RecordConversationTurn(ctx context.Context, request Requ
 	if !ok || !cfg.ConversationRecordingEnabled || !cfg.IncludesGroup(request.GroupID) {
 		return nil
 	}
-	snapshot, err := ExtractPromptSnapshot(request)
+	requestText, err := conversationTranscript(request)
 	if errors.Is(err, ErrNoPromptText) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	responseText := normalizeAssistantResponse(request.Protocol, responseBody)
-	if strings.TrimSpace(responseText) == "" {
+	responseText := normalizeCapturedAssistantResponse(request.Protocol, contentType, responseBody, bufferTruncated)
+	if strings.TrimSpace(responseText) == "" && !bufferTruncated {
 		return nil
 	}
-	requestText := strings.ReplaceAll(snapshot.ScanText, promptAuditPrioritySeparator, "\n\n")
 	requestText, requestChars, requestTruncated := trimConversationText(requestText, cfg.ConversationRequestMaxRunes)
 	responseText, responseChars, responseTruncated := trimConversationText(responseText, cfg.ConversationResponseMaxRunes)
+	responseTruncated = responseTruncated || bufferTruncated
 	externalID, previousResponseID, responseID := conversationIdentity(request, responseBody)
 	capture := conversationCapture{
 		Request: request.Clone(), ConversationKey: conversationKey(request, externalID, previousResponseID),
@@ -55,11 +60,10 @@ func (s *PromptService) RecordConversationTurn(ctx context.Context, request Requ
 		RequestTranscript: requestText, ModelResponse: responseText, RequestChars: requestChars, ResponseChars: responseChars,
 		RequestTruncated: requestTruncated, ResponseTruncated: responseTruncated, StatusCode: statusCode, CapturedAt: s.clock.Now(),
 	}
-	_ = contentType
 	return s.repo.RecordConversationCapture(ctx, capture)
 }
 
-func (s *PromptService) EnqueueConversationTurn(request Request, statusCode int, contentType string, responseBody []byte) {
+func (s *PromptService) EnqueueConversationTurn(request Request, statusCode int, contentType string, responseBody []byte, responseTruncated bool) {
 	if s == nil {
 		return
 	}
@@ -86,7 +90,7 @@ func (s *PromptService) EnqueueConversationTurn(request Request, statusCode int,
 		defer func() { <-s.enqueueSlots }()
 		ctx, cancel := context.WithTimeout(background, 5*time.Second)
 		defer cancel()
-		if err := s.RecordConversationTurn(ctx, requestCopy, statusCode, contentType, responseCopy); err != nil {
+		if err := s.RecordConversationTurn(ctx, requestCopy, statusCode, contentType, responseCopy, responseTruncated); err != nil {
 			LogWarn("conversation_review.capture_failed", map[string]any{"request_id": requestCopy.RequestID, "status": "failed", "error_code": "conversation_capture_failed"})
 		}
 	}()
@@ -97,7 +101,9 @@ func (s *PromptService) QueueConversationReview(ctx context.Context, requestedBy
 	if !ok || !cfg.ConversationRecordingEnabled || !cfg.ConversationReviewEnabled || !cfg.Enabled {
 		return nil, ErrConversationReviewDisabled
 	}
-	_ = s.repo.ReclaimStaleConversationReviews(ctx, s.clock.Now().Add(-10*time.Minute))
+	if err := s.repo.ReclaimStaleConversationReviews(ctx, s.clock.Now().Add(-conversationReviewLeaseDuration)); err != nil {
+		return nil, err
+	}
 	return s.repo.QueueConversationReviewRun(ctx, "manual", requestedBy, cfg)
 }
 
@@ -137,7 +143,7 @@ func (s *PromptService) runConversationReviewTick(ctx context.Context) {
 		return
 	}
 	now := s.clock.Now()
-	if s.claimConversationCleanup(now) {
+	if cfg.ConversationRetentionDays > 0 && cfg.ConversationRetentionDays <= MaxConversationRetentionDays && s.claimConversationCleanup(now) {
 		if err := s.repo.CleanupConversationReview(ctx, now.AddDate(0, 0, -cfg.ConversationRetentionDays)); err != nil {
 			LogWarn("conversation_review.cleanup_failed", map[string]any{"status": "failed", "error_code": "conversation_review_cleanup_failed"})
 		}
@@ -145,7 +151,7 @@ func (s *PromptService) runConversationReviewTick(ctx context.Context) {
 	if !cfg.Enabled || !cfg.ConversationRecordingEnabled || !cfg.ConversationReviewEnabled || len(cfg.EnabledEndpoints()) == 0 {
 		return
 	}
-	if err := s.repo.ReclaimStaleConversationReviews(ctx, now.Add(-10*time.Minute)); err != nil {
+	if err := s.repo.ReclaimStaleConversationReviews(ctx, now.Add(-conversationReviewLeaseDuration)); err != nil {
 		LogWarn("conversation_review.reclaim_failed", map[string]any{"status": "failed", "error_code": "conversation_review_reclaim_failed"})
 		return
 	}
@@ -158,7 +164,11 @@ func (s *PromptService) runConversationReviewTick(ctx context.Context) {
 		return
 	}
 	processed, flagged, failed, runErr := s.processConversationReviewRun(ctx, cfg, run)
-	_ = s.repo.FinishConversationReviewRun(ctx, run.ID, processed, flagged, failed, runErr)
+	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), conversationReviewDBTimeout)
+	defer cancel()
+	if err := s.repo.FinishConversationReviewRun(finishCtx, run.ID, processed, flagged, failed, runErr); err != nil {
+		LogWarn("conversation_review.finish_failed", map[string]any{"status": "failed", "error_code": "conversation_review_finish_failed"})
+	}
 }
 
 func (s *PromptService) claimConversationCleanup(now time.Time) bool {
@@ -176,8 +186,60 @@ func (s *PromptService) processConversationReviewRun(ctx context.Context, cfg Ac
 	if err != nil {
 		return 0, 0, 0, err
 	}
+	runErr = withConversationReviewHeartbeat(ctx, conversationReviewHeartbeatInterval,
+		func(renewCtx context.Context) error {
+			return s.repo.RenewConversationReviewLease(renewCtx, run.ID, turns)
+		}, func(scanCtx context.Context) error {
+			processed, flagged, failed, runErr = s.processConversationReviewTurns(scanCtx, cfg, turns)
+			return runErr
+		})
+	return
+}
+
+func withConversationReviewHeartbeat(ctx context.Context, interval time.Duration, renew func(context.Context) error, process func(context.Context) error) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	renewLease := func() error {
+		renewCtx, stop := context.WithTimeout(ctx, conversationReviewDBTimeout)
+		defer stop()
+		return renew(renewCtx)
+	}
+	if err := renewLease(); err != nil {
+		return err
+	}
+	done := make(chan error, 1)
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				done <- nil
+				return
+			case <-ticker.C:
+				if err := renewLease(); err != nil {
+					if ctx.Err() != nil {
+						done <- nil
+						return
+					}
+					cancel()
+					done <- err
+					return
+				}
+			}
+		}
+	}()
+	err := process(ctx)
+	cancel()
+	return errors.Join(err, <-done)
+}
+
+func (s *PromptService) processConversationReviewTurns(ctx context.Context, cfg ActiveConfig, turns []*ConversationTurn) (processed, flagged, failed int, runErr error) {
 	endpoints := cfg.EnabledEndpoints()
 	for _, turn := range turns {
+		if err := ctx.Err(); err != nil {
+			return processed, flagged, failed, err
+		}
 		input := "User conversation:\n" + turn.RequestTranscript + "\n\nModel response:\n" + turn.ModelResponse
 		chunks := SplitRunes(input, minimumInputLimit(endpoints))
 		started := s.clock.Now()
@@ -196,19 +258,23 @@ func (s *PromptService) processConversationReviewRun(ctx context.Context, cfg Ac
 		}
 		if scanErr != nil {
 			failed++
-			_ = s.repo.FailConversationReviewTurn(ctx, turn, guardErrorCode(scanErr))
+			if err := s.repo.FailConversationReviewTurn(ctx, turn, guardErrorCode(scanErr)); err != nil {
+				return processed, flagged, failed, err
+			}
 			continue
 		}
 		aggregated, err := AggregateResults(results, s.clock.Now().Sub(started))
 		if err != nil {
 			failed++
-			_ = s.repo.FailConversationReviewTurn(ctx, turn, ErrorCodeInvalidResponse)
+			if err := s.repo.FailConversationReviewTurn(ctx, turn, ErrorCodeInvalidResponse); err != nil {
+				return processed, flagged, failed, err
+			}
 			continue
 		}
 		aggregated.ChunkTotal = len(chunks)
 		if err := s.repo.CompleteConversationReviewTurn(ctx, turn, aggregated); err != nil {
 			failed++
-			continue
+			return processed, flagged, failed, err
 		}
 		processed++
 		if aggregated.Decision != EventPass {

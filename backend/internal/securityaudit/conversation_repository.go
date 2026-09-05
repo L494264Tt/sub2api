@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 func (r *PostgreSQLRepository) RecordConversationCapture(ctx context.Context, capture conversationCapture) error {
@@ -195,6 +197,9 @@ func (r *PostgreSQLRepository) CompleteConversationReviewTurn(ctx context.Contex
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := lockConversationSession(ctx, tx, turn.SessionID); err != nil {
+		return err
+	}
 	updated, err := tx.ExecContext(ctx, `
 		UPDATE conversation_review_turns SET review_status='reviewed',reviewed_at=NOW(),review_started_at=NULL,
 			review_decision=$3,risk_level=$4,action=$5,categories=$6::jsonb,matched_scanners=$7::jsonb,
@@ -219,6 +224,9 @@ func (r *PostgreSQLRepository) FailConversationReviewTurn(ctx context.Context, t
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := lockConversationSession(ctx, tx, turn.SessionID); err != nil {
+		return err
+	}
 	updated, err := tx.ExecContext(ctx, `
 		UPDATE conversation_review_turns SET review_status='failed',review_started_at=NULL,
 			review_error_code=$3,review_error_message=$4,updated_at=NOW()
@@ -230,6 +238,14 @@ func (r *PostgreSQLRepository) FailConversationReviewTurn(ctx context.Context, t
 		return err
 	}
 	return tx.Commit()
+}
+
+func lockConversationSession(ctx context.Context, tx *sql.Tx, sessionID int64) error {
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, conversationReviewAdvisoryLockKey); err != nil {
+		return err
+	}
+	var id int64
+	return tx.QueryRowContext(ctx, `SELECT id FROM conversation_review_sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&id)
 }
 
 func refreshConversationSessionSummary(ctx context.Context, tx *sql.Tx, sessionID int64) error {
@@ -248,19 +264,115 @@ func (r *PostgreSQLRepository) FinishConversationReviewRun(ctx context.Context, 
 		status, code = "failed", guardErrorCode(runErr)
 		_, message = sanitizeStoredError(code)
 	}
-	_, err := r.db.ExecContext(ctx, `UPDATE conversation_review_runs SET status=$2,processed_count=$3,flagged_count=$4,
-		failed_count=$5,completed_at=NOW(),last_error_code=$6,last_error_message=$7,updated_at=NOW() WHERE id=$1`,
+	result, err := r.db.ExecContext(ctx, `UPDATE conversation_review_runs SET status=$2,processed_count=$3,flagged_count=$4,
+		failed_count=$5,completed_at=NOW(),last_error_code=$6,last_error_message=$7,updated_at=NOW() WHERE id=$1 AND status='processing'`,
 		runID, status, processed, flagged, failed, code, message)
-	return err
+	return requireOneRow(result, err, ErrLeaseLost)
 }
 
-func (r *PostgreSQLRepository) CleanupConversationReview(ctx context.Context, before time.Time) error {
-	_, err := r.db.ExecContext(ctx, `DELETE FROM conversation_review_sessions WHERE last_turn_at < $1`, before.UTC())
+func (r *PostgreSQLRepository) RenewConversationReviewLease(ctx context.Context, runID int64, turns []*ConversationTurn) error {
+	type claim struct {
+		ID      int64 `json:"id"`
+		Version int64 `json:"version"`
+	}
+	claims := make([]claim, 0, len(turns))
+	for _, turn := range turns {
+		claims = append(claims, claim{ID: turn.ID, Version: turn.ReviewClaimVersion})
+	}
+	raw, err := json.Marshal(claims)
 	if err != nil {
 		return err
 	}
-	_, err = r.db.ExecContext(ctx, `DELETE FROM conversation_review_runs WHERE created_at < $1 AND status IN ('completed','failed')`, before.UTC())
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	// Serialize heartbeat and reclamation so a live batch cannot be reclaimed
+	// between renewal of its run and renewal of its individual turns.
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, conversationReviewAdvisoryLockKey); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE conversation_review_runs SET updated_at=NOW() WHERE id=$1 AND status='processing'`, runID)
+	if err := requireOneRow(result, err, ErrLeaseLost); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE conversation_review_turns t SET updated_at=NOW()
+		FROM jsonb_to_recordset($1::jsonb) AS claim(id BIGINT, version BIGINT)
+		WHERE t.id=claim.id AND t.review_claim_version=claim.version AND t.review_status='processing'`, raw); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (r *PostgreSQLRepository) CleanupConversationReview(ctx context.Context, before time.Time) error {
+	for {
+		count, err := r.cleanupConversationReviewBatch(ctx, before)
+		if err != nil {
+			return err
+		}
+		if count == 0 {
+			break
+		}
+	}
+	_, err := r.db.ExecContext(ctx, `DELETE FROM conversation_review_runs WHERE created_at < $1 AND status IN ('completed','failed')`, before.UTC())
 	return err
+}
+
+const conversationCleanupBatchSize = 100
+
+func (r *PostgreSQLRepository) cleanupConversationReviewBatch(ctx context.Context, before time.Time) (int, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	// Match reclamation/heartbeat lock order; parent locks also serialize
+	// capture and summary writes while old turns are removed.
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, conversationReviewAdvisoryLockKey); err != nil {
+		return 0, err
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT s.id FROM conversation_review_sessions s
+		WHERE EXISTS (SELECT 1 FROM conversation_review_turns t WHERE t.session_id=s.id AND t.captured_at < $1)
+		OR (s.last_turn_at < $1 AND NOT EXISTS (SELECT 1 FROM conversation_review_turns t WHERE t.session_id=s.id))
+		ORDER BY s.id LIMIT $2 FOR UPDATE OF s SKIP LOCKED`, before.UTC(), conversationCleanupBatchSize)
+	if err != nil {
+		return 0, err
+	}
+	ids := make([]int64, 0, conversationCleanupBatchSize)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	_ = rows.Close()
+	if err != nil {
+		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, tx.Commit()
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM conversation_review_turns WHERE session_id=ANY($1::bigint[]) AND captured_at < $2`, pq.Array(ids), before.UTC()); err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE conversation_review_sessions s SET
+		turn_count=(SELECT COUNT(*) FROM conversation_review_turns t WHERE t.session_id=s.id),
+		pending_review_count=(SELECT COUNT(*) FROM conversation_review_turns t WHERE t.session_id=s.id AND t.review_status IN ('pending','processing','failed')),
+		flagged_turn_count=(SELECT COUNT(*) FROM conversation_review_turns t WHERE t.session_id=s.id AND t.review_decision IN ('flag','critical')),
+		latest_review_decision=COALESCE((SELECT t.review_decision FROM conversation_review_turns t WHERE t.session_id=s.id AND t.review_status='reviewed' ORDER BY t.reviewed_at DESC,t.id DESC LIMIT 1),''),
+		started_at=COALESCE((SELECT MIN(t.captured_at) FROM conversation_review_turns t WHERE t.session_id=s.id),s.started_at),
+		last_turn_at=COALESCE((SELECT MAX(t.captured_at) FROM conversation_review_turns t WHERE t.session_id=s.id),s.last_turn_at),
+		updated_at=NOW() WHERE s.id=ANY($1::bigint[])`, pq.Array(ids)); err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM conversation_review_sessions s WHERE s.id=ANY($1::bigint[]) AND NOT EXISTS (SELECT 1 FROM conversation_review_turns t WHERE t.session_id=s.id)`, pq.Array(ids)); err != nil {
+		return 0, err
+	}
+	return len(ids), tx.Commit()
 }
 
 func (r *PostgreSQLRepository) ReclaimStaleConversationReviews(ctx context.Context, before time.Time) error {
@@ -269,10 +381,13 @@ func (r *PostgreSQLRepository) ReclaimStaleConversationReviews(ctx context.Conte
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, conversationReviewAdvisoryLockKey); err != nil {
+		return err
+	}
 	rows, err := tx.QueryContext(ctx, `
 		UPDATE conversation_review_turns SET review_status='failed',review_started_at=NULL,
 			review_error_code='review_lease_expired',review_error_message='',updated_at=NOW()
-		WHERE review_status='processing' AND review_started_at < $1 RETURNING session_id`, before.UTC())
+		WHERE review_status='processing' AND updated_at < $1 RETURNING session_id`, before.UTC())
 	if err != nil {
 		return err
 	}
@@ -300,7 +415,7 @@ func (r *PostgreSQLRepository) ReclaimStaleConversationReviews(ctx context.Conte
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE conversation_review_runs SET status='failed',completed_at=NOW(),
 			last_error_code='review_lease_expired',last_error_message='',updated_at=NOW()
-		WHERE status='processing' AND started_at < $1`, before.UTC()); err != nil {
+		WHERE status='processing' AND updated_at < $1`, before.UTC()); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -365,6 +480,12 @@ func (r *PostgreSQLRepository) DeleteConversationSession(ctx context.Context, id
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := lockConversationSession(ctx, tx, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrConversationNotFound
+		}
+		return nil, err
+	}
 	var turns int64
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM conversation_review_turns WHERE session_id=$1`, id).Scan(&turns); err != nil {
 		return nil, err

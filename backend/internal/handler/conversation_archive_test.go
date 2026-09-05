@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/securityaudit"
@@ -11,20 +12,40 @@ import (
 )
 
 type conversationRecorderStub struct {
-	settings securityaudit.ConversationCaptureSettings
-	request  securityaudit.Request
-	status   int
-	body     []byte
+	settings  securityaudit.ConversationCaptureSettings
+	request   securityaudit.Request
+	status    int
+	body      []byte
+	truncated bool
+}
+
+func TestConversationArchiveMiddlewareMarksTruncationWithoutChangingResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	const limit = 32
+	recorder := &conversationRecorderStub{settings: securityaudit.ConversationCaptureSettings{Enabled: true, ResponseMaxBytes: limit}}
+	router := gin.New()
+	router.Use(ConversationArchiveMiddleware(recorder))
+	body := `{"output_text":"` + strings.Repeat("a", limit*2) + `"}`
+	router.POST("/v1/responses", func(c *gin.Context) {
+		c.Set(conversationAuditRequestContextKey, securityaudit.Request{Protocol: "openai_responses", Stage: "http"})
+		c.Data(http.StatusOK, "application/json", []byte(body))
+	})
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/responses", nil))
+	require.Equal(t, body, response.Body.String())
+	require.Len(t, recorder.body, limit)
+	require.True(t, recorder.truncated)
 }
 
 func (s *conversationRecorderStub) ConversationCaptureSettings(*int64) securityaudit.ConversationCaptureSettings {
 	return s.settings
 }
 
-func (s *conversationRecorderStub) EnqueueConversationTurn(request securityaudit.Request, statusCode int, _ string, responseBody []byte) {
+func (s *conversationRecorderStub) EnqueueConversationTurn(request securityaudit.Request, statusCode int, _ string, responseBody []byte, truncated bool) {
 	s.request = request
 	s.status = statusCode
 	s.body = append([]byte(nil), responseBody...)
+	s.truncated = truncated
 }
 
 func TestConversationArchiveMiddlewareCapturesEnabledSuccessfulResponse(t *testing.T) {
