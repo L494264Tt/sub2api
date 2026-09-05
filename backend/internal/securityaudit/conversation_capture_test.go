@@ -15,6 +15,10 @@ func TestNormalizeAssistantResponse(t *testing.T) {
 		body     string
 		want     string
 	}{
+		{name: "JSON containing SSE vocabulary", protocol: "openai_chat", body: `{"choices":[{"message":{"content":"Use data: and event: fields"}}]}`, want: "Use data: and event: fields"},
+		{name: "chat stream whitespace", protocol: "openai_chat", body: "data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" world\\n\"}}]}\n\n", want: "Hello world\n"},
+		{name: "anthropic stream whitespace", protocol: "anthropic_messages", body: "data: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"a \"}}\n\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\" b\"}}\n\n", want: "a  b"},
+		{name: "gemini stream whitespace", protocol: "gemini", body: "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"a \"}]}}]}\n\ndata: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\" b\"}]}}]}\n\n", want: "a  b"},
 		{name: "chat completion", protocol: "openai_chat_completions", body: `{"choices":[{"message":{"content":"hello"}}]}`, want: "hello"},
 		{name: "responses", protocol: "openai_responses", body: `{"output_text":"answer","output":[{"content":[{"type":"output_text","text":"answer"}]}]}`, want: "answer"},
 		{name: "anthropic", protocol: "anthropic_messages", body: `{"content":[{"type":"text","text":"claude"}]}`, want: "claude"},
@@ -34,6 +38,43 @@ func TestNormalizeAssistantResponse(t *testing.T) {
 			require.Equal(t, test.want, normalizeAssistantResponse(test.protocol, []byte(test.body)))
 		})
 	}
+}
+
+func TestConversationTranscriptPreservesOrderAndRoles(t *testing.T) {
+	for _, protocol := range []string{"openai_chat", "anthropic_messages"} {
+		request := Request{Protocol: protocol, Body: []byte(`{"messages":[{"role":"user","content":"first question"},{"role":"assistant","content":"first answer"},{"role":"user","content":"second question"}]}`)}
+		got, err := conversationTranscript(request)
+		require.NoError(t, err)
+		require.Equal(t, "[user]\nfirst question\n\n[assistant]\nfirst answer\n\n[user]\nsecond question", got)
+	}
+	for _, request := range []Request{
+		{Protocol: "openai_responses", Body: []byte(`{"instructions":"policy","input":[{"role":"user","content":"question"},{"role":"assistant","content":"answer"}]}`)},
+		{Protocol: "gemini", Body: []byte(`{"systemInstruction":{"parts":[{"text":"policy"}]},"contents":[{"role":"user","parts":[{"text":"question"}]},{"role":"model","parts":[{"text":"answer"}]}]}`)},
+	} {
+		got, err := conversationTranscript(request)
+		require.NoError(t, err)
+		require.True(t, strings.HasPrefix(got, "[system]\npolicy\n\n[user]\nquestion"))
+		require.True(t, strings.HasSuffix(got, "\nanswer"))
+	}
+}
+
+func TestTruncatedConversationResponsesRetainRecoverableText(t *testing.T) {
+	tests := []struct{ name, protocol, body, want string }{
+		{"chat JSON string", "openai_chat", `{"choices":[{"message":{"content":"Hello world`, "Hello world"},
+		{"responses JSON", "openai_responses", `{"output":[{"content":[{"type":"output_text","text":"hello `, "hello "},
+		{"escaped text", "anthropic_messages", `{"content":[{"type":"text","text":"line\nnext\u4`, "line\nnext"},
+		{"surrogate pair", "openai_responses", `{"output_text":"hello\uD83D\uDE`, "hello"},
+		{"later metadata truncated", "openai_chat", `{"choices":[{"message":{"content":"kept"}}],"usage":{"total_tokens":`, "kept"},
+		{"complete delta and partial delta", "openai_chat", "data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" world ", "Hello world "},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.want, normalizeCapturedAssistantResponse(test.protocol, "", []byte(test.body), true))
+		})
+	}
+	require.Empty(t, normalizeCapturedAssistantResponse("openai_chat", "application/json", []byte(tests[0].body), false))
+	unicodeBody := []byte(`{"output_text":"hello ` + "世")
+	require.Equal(t, "hello ", normalizeCapturedAssistantResponse("openai_responses", "application/json", unicodeBody[:len(unicodeBody)-1], true))
 }
 
 func TestConversationIdentityUsesExplicitHeaderAndFindsStreamResponseID(t *testing.T) {

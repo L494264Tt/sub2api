@@ -56,6 +56,7 @@ export default {
       scanners: 'Qwen3Guard input-risk categories', workerCount: 'Worker count', queueCapacity: 'Persistent queue capacity', strategy: 'Node strategy', strategyHint: 'Try nodes in configuration order and fail over when allowed.',
     },
     conversations: {
+      truncated: 'The request or response reached the recording limit. Only part of this turn was saved and reviewed.',
       title: 'Conversation archive', description: 'Inspect recorded user conversations, model responses, and per-turn review state.', configTitle: 'Conversation recording and periodic review',
       configDescription: 'Record successful conversations for the selected groups and review them periodically with the active Guard pool.', recording: 'Record conversations and model responses', periodicReview: 'Enable periodic conversation review',
       privacyHint: 'Archived content is sensitive. Recording is off by default, and deleting a session also deletes all of its turns.', interval: 'Review interval (minutes)', batchSize: 'Turns per batch', retention: 'Retention days',
@@ -64,6 +65,9 @@ export default {
       deleteConfirm: 'Permanently delete this conversation and all of its turns?', deleted: 'Conversation archive deleted.', previous: 'Previous', next: 'Next',
     },
     reviewRuns: {
+      counts: '{processed} processed · {flagged} flagged · {failed} failed', noError: 'None',
+      statuses: { queued: 'Queued', processing: 'Processing', completed: 'Completed', failed: 'Failed' },
+      triggers: { scheduled: 'Scheduled', manual: 'Manual' },
       title: 'Review runs', description: 'Scheduled and manual runs share one queue and claim unreviewed turns in bounded batches.', runNow: 'Review now', queueing: 'Queueing…', queued: 'Review run queued.',
       disabledHint: 'Save a configuration with Prompt Audit, conversation recording, and periodic review enabled first.', created: 'Created', trigger: 'Trigger', status: 'Status', result: 'Result', error: 'Error', empty: 'No review runs yet.',
     },

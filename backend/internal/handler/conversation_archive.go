@@ -45,7 +45,7 @@ func ConversationArchiveMiddleware(recorder securityaudit.ConversationRecorder) 
 		if !exists || !ok || strings.TrimSpace(request.Stage) != "http" || !isConversationProtocol(request.Protocol) {
 			return
 		}
-		recorder.EnqueueConversationTurn(request, c.Writer.Status(), c.Writer.Header().Get("Content-Type"), writer.capturedConversationBytes())
+		recorder.EnqueueConversationTurn(request, c.Writer.Status(), c.Writer.Header().Get("Content-Type"), writer.capturedConversationBytes(), writer.conversationCaptureTruncated())
 	}
 }
 

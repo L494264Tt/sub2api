@@ -56,6 +56,7 @@ export default {
       scanners: 'Qwen3Guard 输入风险分类', workerCount: 'Worker 数量', queueCapacity: '持久队列容量', strategy: '节点策略', strategyHint: '按配置顺序优先尝试，必要时故障切换。',
     },
     conversations: {
+      truncated: '本轮请求或回复达到记录上限，仅保留部分内容；审查结论仅覆盖已保存内容。',
       title: '会话归档', description: '查看已记录的用户对话、模型回复和逐轮审查状态。', configTitle: '会话记录与定期审查',
       configDescription: '记录适用分组的成功对话回复，并按周期使用当前 Guard 节点复审。', recording: '记录会话与模型回复', periodicReview: '启用定期对话审查',
       privacyHint: '归档内容属于敏感数据。功能默认关闭，删除会话会级联删除全部轮次。', interval: '审查间隔（分钟）', batchSize: '每批轮次数', retention: '保留天数',
@@ -64,6 +65,9 @@ export default {
       deleteConfirm: '永久删除这个会话及其全部轮次？', deleted: '会话归档已删除。', previous: '上一页', next: '下一页',
     },
     reviewRuns: {
+      counts: '已处理 {processed} · 风险 {flagged} · 失败 {failed}', noError: '无',
+      statuses: { queued: '排队中', processing: '审查中', completed: '已完成', failed: '失败' },
+      triggers: { scheduled: '定时', manual: '手动' },
       title: '审查任务', description: '定时任务和手动任务共用同一队列，逐批领取尚未审查的轮次。', runNow: '立即审查', queueing: '正在入队…', queued: '审查任务已入队。',
       disabledHint: '保存配置并同时启用提示词审计、会话归档和定期审查后才能执行。', created: '创建时间', trigger: '触发方式', status: '状态', result: '处理结果', error: '错误', empty: '尚无审查任务。',
     },

@@ -528,24 +528,25 @@ type opsCaptureWriter struct {
 }
 
 type opsCaptureWriterState struct {
-	mu                sync.RWMutex
-	inFlight          sync.WaitGroup
-	generation        uint64
-	responseWriter    gin.ResponseWriter
-	limit             int
-	buf               bytes.Buffer
-	conversationLimit int
-	conversationBuf   bytes.Buffer
-	probe             []byte
-	lineProbe         []byte
-	frameLineLen      int
-	frameTruncated    bool
-	lineTruncated     bool
-	skipLF            bool
-	sseCapturing      bool
-	terminalError     parsedOpsError
-	terminalFound     bool
-	ctx               *gin.Context
+	mu                    sync.RWMutex
+	inFlight              sync.WaitGroup
+	generation            uint64
+	responseWriter        gin.ResponseWriter
+	limit                 int
+	buf                   bytes.Buffer
+	conversationLimit     int
+	conversationBuf       bytes.Buffer
+	conversationTruncated bool
+	probe                 []byte
+	lineProbe             []byte
+	frameLineLen          int
+	frameTruncated        bool
+	lineTruncated         bool
+	skipLF                bool
+	sseCapturing          bool
+	terminalError         parsedOpsError
+	terminalFound         bool
+	ctx                   *gin.Context
 }
 
 const (
@@ -586,6 +587,7 @@ func acquireOpsCaptureWriterFromPool(pool opsCaptureWriterStatePool, rw gin.Resp
 	state.buf.Reset()
 	state.conversationLimit = 0
 	state.conversationBuf.Reset()
+	state.conversationTruncated = false
 	state.probe = state.probe[:0]
 	state.lineProbe = state.lineProbe[:0]
 	state.frameLineLen = 0
@@ -738,6 +740,15 @@ func (w *opsCaptureWriter) capturedConversationBytes() []byte {
 	}
 	defer state.mu.RUnlock()
 	return append([]byte(nil), state.conversationBuf.Bytes()...)
+}
+
+func (w *opsCaptureWriter) conversationCaptureTruncated() bool {
+	state, _ := w.lockActive()
+	if state == nil {
+		return false
+	}
+	defer state.mu.RUnlock()
+	return state.conversationTruncated
 }
 
 func (w *opsCaptureWriter) capturedTerminalError() (parsedOpsError, bool) {
@@ -1105,6 +1116,9 @@ func (state *opsCaptureWriterState) appendConversationResponse(chunk []byte) {
 		return
 	}
 	remaining := state.conversationLimit - state.conversationBuf.Len()
+	if len(chunk) > remaining {
+		state.conversationTruncated = true
+	}
 	if remaining <= 0 {
 		return
 	}
