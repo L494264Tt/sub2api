@@ -84,3 +84,50 @@ func TestConversationResponseToolCallsAreRetained(t *testing.T) {
 		require.Contains(t, context[0].Content, "run")
 	}
 }
+
+func TestInjectedClientUserContextGetsItsOwnBudget(t *testing.T) {
+	injected := "# AGENTS.md instructions for /repo\n<INSTRUCTIONS>" + strings.Repeat("policy ", 1000) + "</INSTRUCTIONS>\n<environment_context>workspace</environment_context>\nreal question"
+	body, _ := json.Marshal(map[string]any{"messages": []any{map[string]any{"role": "user", "content": injected}, map[string]any{"role": "user", "content": "<skill><name>helper</name>instructions</skill>"}}})
+	details, _, _, truncated, err := captureConversationMessages(Request{Body: body}, "answer", 128)
+	require.NoError(t, err)
+	require.Len(t, details.Messages, 1)
+	require.Equal(t, "real question", details.Messages[0].Content)
+	require.False(t, truncated)
+	require.True(t, details.ContextTruncated)
+	for _, text := range []string{"Explain <skill>helper</skill>", "<skill>unfinished", "# AGENTS.md instructions for /repo\n<INSTRUCTIONS>unfinished"} {
+		remaining, context := splitConversationClientContext(text)
+		require.Equal(t, text, remaining)
+		require.Empty(t, context)
+	}
+}
+
+func TestHeartbeatAndSuggestionChecksAreAuxiliary(t *testing.T) {
+	for _, test := range []struct{ prompt, answer, reason string }{
+		{"[Sat 2026-09-05 07:21 UTC] [OpenClaw heartbeat poll]", "HEARTBEAT_OK", "heartbeat_poll"},
+		{suggestionSafetySignature + "\npolicy", `{"exclude":[]}`, "suggestion_safety_check"},
+	} {
+		body, _ := json.Marshal(map[string]any{"messages": []any{map[string]any{"role": "user", "content": test.prompt}}})
+		details, kind, _, _, err := captureConversationMessages(Request{Body: body}, test.answer, 128)
+		require.NoError(t, err)
+		require.Equal(t, conversationKindAuxiliary, kind)
+		require.Equal(t, test.reason, details.ClassificationReason)
+	}
+}
+
+func TestActionApprovalRequestsAreAuxiliary(t *testing.T) {
+	body, _ := json.Marshal(map[string]any{"system": actionReviewSignature, "messages": []any{map[string]any{"role": "user", "content": "planned action"}}})
+	details, kind, _, _, err := captureConversationMessages(Request{Body: body}, `{"outcome":"allow"}`, 128)
+	require.NoError(t, err)
+	require.Equal(t, conversationKindAuxiliary, kind)
+	require.Equal(t, "action_approval_review", details.ClassificationReason)
+}
+
+func TestReasoningSummariesStayOutsideVisibleResponse(t *testing.T) {
+	body := []byte("data: {\"type\":\"response.reasoning_summary_text.delta\",\"delta\":\"internal heading\"}\n\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"actual reply\"}\n\n")
+	require.Equal(t, "actual reply", normalizeAssistantResponse("openai_responses", body))
+	context, _ := captureConversationResponseContext(body, 1024)
+	require.Len(t, context, 1)
+	require.Equal(t, "reasoning", context[0].Kind)
+	gemini := []byte(`{"candidates":[{"content":{"parts":[{"thought":true,"text":"internal"},{"text":"actual"}]}}]}`)
+	require.Equal(t, "actual", normalizeAssistantResponse("gemini", gemini))
+}

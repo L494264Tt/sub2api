@@ -56,6 +56,10 @@ export default {
       scanners: 'Qwen3Guard input-risk categories', workerCount: 'Worker count', queueCapacity: 'Persistent queue capacity', strategy: 'Node strategy', strategyHint: 'Try nodes in configuration order and fail over when allowed.',
     },
     conversations: {
+      dialogueHistory: 'Expand conversation history',
+      readingView: 'Reading view', taskOriginal: 'Initial user request', latestReply: 'Latest reply', progressRecords: 'Expand {count} progress messages',
+      userMessageCount: '{count} user messages', toolRequestCount: '{count} requests with tool activity', noReplyYet: 'No text reply recorded yet.',
+      noReadableDialogue: 'No identifiable dialogue. Inspect the original records in Per request.', readingGaps: 'Some records are legacy or truncated; this view may not contain the entire history.',
       viewMode: 'View', fullConversation: 'Full conversation', perRequest: 'Per request', onlyAuxiliary: 'This session contains only auxiliary requests. Switch to Per request to inspect them.',
       historyMatched: 'This turn was linked by matching message history for the same user and API key.', unlinked: 'No usable conversation identifier was provided. This request is archived separately, including the message history it carried.',
       requestKind: 'Request type', kinds: { conversation: 'Dialogue (including unclassified)', auxiliary: 'Suspected auxiliary requests', unknown: 'Unclassified / legacy records' },

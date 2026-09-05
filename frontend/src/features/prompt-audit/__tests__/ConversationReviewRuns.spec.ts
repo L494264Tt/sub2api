@@ -102,5 +102,7 @@ it('displays an explicit warning for a truncated archived turn', async () => {
   const open = wrapper.findAll('button').find((button) => button.text() === 'common.view')!
   await open.trigger('click')
   await flushPromises()
+  expect(wrapper.get('[role="status"]').text()).toBe('admin.promptAudit.conversations.readingGaps')
+  await wrapper.findAll('[role="tab"]').find(tab => tab.text() === 'admin.promptAudit.conversations.fullConversation')!.trigger('click')
   expect(wrapper.get('[role="status"]').text()).toBe('admin.promptAudit.conversations.truncated')
 })

@@ -140,6 +140,9 @@ func responseTexts(protocol string, root map[string]any) []string {
 	if root == nil {
 		return nil
 	}
+	if strings.Contains(jsonString(root, "type"), "reasoning") {
+		return nil
+	}
 	result := make([]string, 0, 4)
 	appendText := func(value any) {
 		result = append(result, responseContentTexts(value)...)
@@ -147,7 +150,7 @@ func responseTexts(protocol string, root map[string]any) []string {
 	if value, ok := root["output_text"].(string); ok && strings.TrimSpace(value) != "" {
 		return []string{value}
 	}
-	if delta, ok := root["delta"].(string); ok && strings.Contains(strings.ToLower(jsonString(root, "type")), "text") {
+	if delta, ok := root["delta"].(string); ok && jsonString(root, "type") == "response.output_text.delta" {
 		result = append(result, delta)
 	}
 	if delta, ok := root["delta"].(map[string]any); ok {
@@ -170,6 +173,9 @@ func responseTexts(protocol string, root map[string]any) []string {
 	if output, ok := root["output"].([]any); ok {
 		for _, item := range output {
 			entry, _ := item.(map[string]any)
+			if jsonString(entry, "type") == "reasoning" {
+				continue
+			}
 			appendText(entry["content"])
 		}
 	}
@@ -201,6 +207,9 @@ func responseContentTexts(value any) []string {
 		}
 		return result
 	case map[string]any:
+		if thought, _ := value["thought"].(bool); thought {
+			return nil
+		}
 		switch jsonString(value, "type") {
 		case "", "text", "input_text", "output_text":
 			if text, ok := value["text"].(string); ok {

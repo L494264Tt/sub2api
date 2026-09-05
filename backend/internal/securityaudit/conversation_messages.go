@@ -16,6 +16,8 @@ const (
 	conversationKindUnknown   = "unknown"
 	conversationMessageLimit  = 256
 	securityMonitorSignature  = "you are a security monitor for autonomous ai coding agents."
+	suggestionSafetySignature = "You are an expert at upholding safety and compliance standards for Codex ambient suggestions."
+	actionReviewSignature     = "You are judging one planned coding-agent action."
 )
 
 // Parse roles and typed blocks before applying any storage limit. System and
@@ -31,7 +33,20 @@ func captureConversationMessages(request Request, response string, limit int) (C
 	details := ConversationRequestDetails{Version: 1, CurrentMessagePosition: -1, Messages: []ConversationMessage{}, Context: []ConversationMessage{}}
 	position := 0
 	monitor := false
-	add := func(role, kind, text string) {
+	suggestionCheck := false
+	actionReview := false
+	var add func(role, kind, text string)
+	add = func(role, kind, text string) {
+		if role == "user" && kind == "text" {
+			remaining, context := splitConversationClientContext(text)
+			for _, block := range context {
+				add(role, "client_context", block)
+			}
+			text = remaining
+			if strings.HasPrefix(strings.TrimSpace(text), suggestionSafetySignature) {
+				suggestionCheck = true
+			}
+		}
 		if strings.TrimSpace(text) == "" {
 			return
 		}
@@ -40,6 +55,9 @@ func captureConversationMessages(request Request, response string, limit int) (C
 		position++
 		if role == "system" && strings.HasPrefix(strings.ToLower(strings.TrimSpace(text)), securityMonitorSignature) {
 			monitor = true
+		}
+		if role == "system" && strings.HasPrefix(strings.TrimSpace(text), actionReviewSignature) {
+			actionReview = true
 		}
 		if kind == "text" && (role == "user" || role == "assistant" || role == "model") {
 			if role == "model" {
@@ -164,6 +182,36 @@ func captureConversationMessages(request Request, response string, limit int) (C
 		kind = conversationKindAuxiliary
 		details.ClassificationReason = "security_monitor_signature"
 	}
+	if len(details.Messages) > 0 {
+		last := details.Messages[len(details.Messages)-1]
+		text := strings.TrimSpace(last.Content)
+		if last.Role == "user" && answer == "HEARTBEAT_OK" && strings.HasPrefix(text, "[") && strings.HasSuffix(text, "] [OpenClaw heartbeat poll]") && !strings.Contains(text, "\n") {
+			kind = conversationKindAuxiliary
+			details.ClassificationReason = "heartbeat_poll"
+		}
+	}
+	if suggestionCheck {
+		var result map[string]json.RawMessage
+		if json.Unmarshal([]byte(answer), &result) == nil && len(result) == 1 {
+			if raw, ok := result["exclude"]; ok && strings.HasPrefix(strings.TrimSpace(string(raw)), "[") {
+				var excluded []json.RawMessage
+				if json.Unmarshal(raw, &excluded) == nil {
+					kind = conversationKindAuxiliary
+					details.ClassificationReason = "suggestion_safety_check"
+				}
+			}
+		}
+	}
+	if actionReview {
+		var result struct {
+			Outcome   string `json:"outcome"`
+			RiskLevel string `json:"risk_level"`
+		}
+		if json.Unmarshal([]byte(answer), &result) == nil && (result.Outcome == "allow" || result.Outcome == "deny") {
+			kind = conversationKindAuxiliary
+			details.ClassificationReason = "action_approval_review"
+		}
+	}
 	var total int
 	for _, message := range details.Messages {
 		if message.Position == details.CurrentMessagePosition {
@@ -260,6 +308,10 @@ func captureConversationResponseContext(raw []byte, limit int) ([]ConversationMe
 		context = append(context, ConversationMessage{Role: "assistant", Kind: kind, Content: conversationJSONText(value), Position: len(context)})
 	}
 	for _, root := range roots {
+		if strings.Contains(jsonString(root, "type"), "reasoning") {
+			add("reasoning", root)
+			continue
+		}
 		if response, ok := root["response"].(map[string]any); ok {
 			root = response
 		}
@@ -303,6 +355,9 @@ func captureConversationResponseContext(raw []byte, limit int) ([]ConversationMe
 				parts, _ := content["parts"].([]any)
 				for _, item := range parts {
 					part, _ := item.(map[string]any)
+					if thought, _ := part["thought"].(bool); thought {
+						add("reasoning", part)
+					}
 					if call := part["functionCall"]; call != nil {
 						add("tool_use", call)
 					}
