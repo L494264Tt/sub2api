@@ -161,3 +161,79 @@ func TestStartOfWeek_Boundaries(t *testing.T) {
 		})
 	}
 }
+
+func TestStartOfQuotaDay_Boundaries(t *testing.T) {
+	if err := Init("Asia/Shanghai"); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	t.Cleanup(func() { _ = Init("UTC") })
+
+	loc := Location()
+	cases := []struct {
+		name string
+		in   time.Time
+		want time.Time
+	}{
+		{
+			name: "before-seven-uses-previous-day",
+			in:   time.Date(2026, 7, 25, 6, 59, 59, 0, loc),
+			want: time.Date(2026, 7, 24, 7, 0, 0, 0, loc),
+		},
+		{
+			name: "at-seven-uses-today",
+			in:   time.Date(2026, 7, 25, 7, 0, 0, 0, loc),
+			want: time.Date(2026, 7, 25, 7, 0, 0, 0, loc),
+		},
+		{
+			name: "after-seven-uses-today",
+			in:   time.Date(2026, 7, 25, 23, 30, 0, 0, loc),
+			want: time.Date(2026, 7, 25, 7, 0, 0, 0, loc),
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := StartOfQuotaDay(c.in); !got.Equal(c.want) {
+				t.Errorf("StartOfQuotaDay(%v) = %v, want %v", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+func TestStartOfQuotaWeek_Boundaries(t *testing.T) {
+	if err := Init("Asia/Shanghai"); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	t.Cleanup(func() { _ = Init("UTC") })
+
+	loc := Location()
+	cases := []struct {
+		name string
+		in   time.Time
+		want time.Time
+	}{
+		{
+			name: "monday-before-seven-uses-previous-week",
+			in:   time.Date(2026, 7, 20, 6, 59, 59, 0, loc),
+			want: time.Date(2026, 7, 13, 7, 0, 0, 0, loc),
+		},
+		{
+			name: "monday-at-seven-uses-current-week",
+			in:   time.Date(2026, 7, 20, 7, 0, 0, 0, loc),
+			want: time.Date(2026, 7, 20, 7, 0, 0, 0, loc),
+		},
+		{
+			name: "sunday-uses-current-week",
+			in:   time.Date(2026, 7, 26, 12, 0, 0, 0, loc),
+			want: time.Date(2026, 7, 20, 7, 0, 0, 0, loc),
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := StartOfQuotaWeek(c.in); !got.Equal(c.want) {
+				t.Errorf("StartOfQuotaWeek(%v) = %v, want %v", c.in, got, c.want)
+			}
+		})
+	}
+}

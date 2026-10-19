@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,6 +37,9 @@ var (
 	ErrUserPlatformDailyQuotaExhausted   = infraerrors.TooManyRequests("USER_PLATFORM_DAILY_QUOTA_EXHAUSTED", "Daily usage quota exhausted for this platform.")
 	ErrUserPlatformWeeklyQuotaExhausted  = infraerrors.TooManyRequests("USER_PLATFORM_WEEKLY_QUOTA_EXHAUSTED", "Weekly usage quota exhausted for this platform.")
 	ErrUserPlatformMonthlyQuotaExhausted = infraerrors.TooManyRequests("USER_PLATFORM_MONTHLY_QUOTA_EXHAUSTED", "Monthly usage quota exhausted for this platform.")
+	ErrUserToken1dQuotaExhausted         = infraerrors.TooManyRequests("USER_TOKEN_1D_QUOTA_EXHAUSTED", "Daily GPT token quota exhausted for this user.")
+	ErrUserToken7dQuotaExhausted         = infraerrors.TooManyRequests("USER_TOKEN_7D_QUOTA_EXHAUSTED", "7-day rolling GPT token quota exhausted for this user.")
+	ErrUserToken30dQuotaExhausted        = infraerrors.TooManyRequests("USER_TOKEN_30D_QUOTA_EXHAUSTED", "30-day rolling GPT token quota exhausted for this user.")
 )
 
 // subscriptionCacheData 订阅缓存数据结构（内部使用）
@@ -78,6 +82,8 @@ const (
 	cacheWriteTimeout         = 2 * time.Second // 单个写入操作超时
 	cacheWriteDropLogInterval = 5 * time.Second // 丢弃日志节流间隔
 	balanceLoadTimeout        = 3 * time.Second
+	userTokenUsageCacheTTL    = 30 * time.Second
+	userTokenUsageLoadTimeout = 3 * time.Second
 )
 
 // cacheWriteTask 缓存写入任务
@@ -113,6 +119,7 @@ type BillingCacheService struct {
 	cfg                   *config.Config
 	circuitBreaker        *billingCircuitBreaker
 	userPlatformQuotaRepo UserPlatformQuotaRepository
+	usageLogRepo          UsageLogRepository
 
 	cacheWriteChan     chan cacheWriteTask
 	cacheWriteWg       sync.WaitGroup
@@ -121,11 +128,18 @@ type BillingCacheService struct {
 	stopped            atomic.Bool
 	balanceLoadSF      singleflight.Group
 	quotaLoadSF        singleflight.Group
+	tokenQuotaLoadSF   singleflight.Group
 	// 丢弃日志节流计数器（减少高负载下日志噪音）
 	cacheWriteDropFullCount     uint64
 	cacheWriteDropFullLastLog   int64
 	cacheWriteDropClosedCount   uint64
 	cacheWriteDropClosedLastLog int64
+}
+
+func (s *BillingCacheService) SetUsageLogRepository(repo UsageLogRepository) {
+	if s != nil {
+		s.usageLogRepo = repo
+	}
 }
 
 // NewBillingCacheService 创建计费缓存服务
@@ -733,6 +747,10 @@ func (s *BillingCacheService) IncrementUserPlatformQuotaUsage(userID int64, plat
 // 订阅模式：检查缓存用量未超过限额（Group限额从参数传入）
 // platform 为请求的目标平台（如 "anthropic"），传空串 "" 时跳过 user × platform quota 检查。
 func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user *User, apiKey *APIKey, group *Group, subscription *UserSubscription, platform string) error {
+	requestedModel, _ := RequestedModelFromContext(ctx)
+	if err := s.checkUserTokenQuotaEligibility(ctx, user, requestedModel); err != nil {
+		return err
+	}
 	// 简易模式：跳过所有计费检查
 	if s.cfg.RunMode == config.RunModeSimple {
 		return nil
@@ -774,6 +792,90 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 	}
 
 	return nil
+}
+
+func (s *BillingCacheService) checkUserTokenQuotaEligibility(ctx context.Context, user *User, requestedModel string) error {
+	if s == nil || user == nil || !user.HasTokenLimit() || !isUserTokenQuotaModel(requestedModel) {
+		return nil
+	}
+	if s.usageLogRepo == nil {
+		return ErrBillingServiceUnavailable
+	}
+
+	now := time.Now().UTC()
+	quotaDayStartedAt := timezone.StartOfQuotaDay(now)
+	var usage *UserTokenUsage
+	if cache, ok := s.cache.(UserTokenUsageCache); ok {
+		cached, hit, err := cache.GetUserTokenUsageCache(ctx, user.ID, user.TokenQuotaStartedAt, quotaDayStartedAt)
+		if err == nil && hit && cached != nil {
+			usage = cached
+		} else if err != nil {
+			logger.LegacyPrintf("service.billing_cache", "Warning: user token usage cache read failed user=%d: %v", user.ID, err)
+		}
+	}
+
+	if usage == nil {
+		key := strconv.FormatInt(user.ID, 10) + ":" +
+			strconv.FormatInt(user.TokenQuotaStartedAt.UnixNano(), 10) + ":" +
+			strconv.FormatInt(quotaDayStartedAt.UnixNano(), 10)
+		value, err, _ := s.tokenQuotaLoadSF.Do(key, func() (any, error) {
+			loadCtx, cancel := context.WithTimeout(context.Background(), userTokenUsageLoadTimeout)
+			defer cancel()
+			return s.usageLogRepo.GetUserTokenUsage(loadCtx, user.ID, now, user.TokenQuotaStartedAt)
+		})
+		if err != nil {
+			logger.LegacyPrintf("service.billing_cache", "ALERT: user token usage load failed user=%d: %v", user.ID, err)
+			return ErrBillingServiceUnavailable.WithCause(err)
+		}
+		var ok bool
+		usage, ok = value.(*UserTokenUsage)
+		if !ok || usage == nil {
+			return ErrBillingServiceUnavailable.WithCause(fmt.Errorf("unexpected user token usage type: %T", value))
+		}
+		if cache, ok := s.cache.(UserTokenUsageCache); ok {
+			if err := cache.SetUserTokenUsageCache(ctx, user.ID, user.TokenQuotaStartedAt, quotaDayStartedAt, usage, userTokenUsageCacheTTL); err != nil {
+				logger.LegacyPrintf("service.billing_cache", "Warning: user token usage cache write failed user=%d: %v", user.ID, err)
+			}
+		}
+	}
+
+	if user.TokenLimit1d > 0 && usage.Usage1d >= user.TokenLimit1d {
+		return ErrUserToken1dQuotaExhausted
+	}
+	if user.TokenLimit7d > 0 && usage.Usage7d >= user.TokenLimit7d {
+		return ErrUserToken7dQuotaExhausted
+	}
+	if user.TokenLimit30d > 0 && usage.Usage30d >= user.TokenLimit30d {
+		return ErrUserToken30dQuotaExhausted
+	}
+	return nil
+}
+
+// IncrementUserTokenUsage updates an existing short-lived usage cache after a
+// successfully persisted usage record. Cache misses are intentionally ignored;
+// the next preflight rebuilds an exact rolling total from usage_logs.
+func (s *BillingCacheService) IncrementUserTokenUsage(userID int64, quotaStartedAt time.Time, requestedModel string, tokens int64) {
+	if s == nil || userID <= 0 || tokens <= 0 || !isUserTokenQuotaModel(requestedModel) {
+		return
+	}
+	cache, ok := s.cache.(UserTokenUsageCache)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), cacheWriteTimeout)
+	defer cancel()
+	quotaDayStartedAt := timezone.StartOfQuotaDay(time.Now())
+	if err := cache.IncrementUserTokenUsageCache(ctx, userID, quotaStartedAt, quotaDayStartedAt, tokens); err != nil {
+		logger.LegacyPrintf("service.billing_cache", "Warning: increment user token usage cache failed user=%d tokens=%d: %v", userID, tokens, err)
+	}
+}
+
+func isUserTokenQuotaModel(model string) bool {
+	model = strings.ToLower(strings.TrimSpace(model))
+	if slash := strings.LastIndex(model, "/"); slash >= 0 {
+		model = strings.TrimSpace(model[slash+1:])
+	}
+	return strings.HasPrefix(model, "gpt-")
 }
 
 // checkRPM 执行并行 RPM 限流，所有适用的限制同时生效，任一超限即拒绝：
@@ -1114,16 +1216,16 @@ func (s *BillingCacheService) checkUserPlatformQuotaEligibility(
 		newDailyStart := entry.DailyWindowStart
 		newWeeklyStart := entry.WeeklyWindowStart
 		newMonthlyStart := entry.MonthlyWindowStart
-		if quotaWindowExpired(entry.DailyWindowStart, timezone.StartOfDay(now)) {
+		if quotaWindowExpired(entry.DailyWindowStart, timezone.StartOfQuotaDay(now)) {
 			dailyUsage = 0
 			windowExpired = true
-			dayStart := timezone.StartOfDay(now)
+			dayStart := timezone.StartOfQuotaDay(now)
 			newDailyStart = &dayStart
 		}
-		if quotaWindowExpired(entry.WeeklyWindowStart, timezone.StartOfWeek(now)) {
+		if quotaWindowExpired(entry.WeeklyWindowStart, timezone.StartOfQuotaWeek(now)) {
 			weeklyUsage = 0
 			windowExpired = true
-			weekStart := timezone.StartOfWeek(now)
+			weekStart := timezone.StartOfQuotaWeek(now)
 			newWeeklyStart = &weekStart
 		}
 		if monthlyQuotaWindowExpired(entry.MonthlyWindowStart, now) {
@@ -1212,8 +1314,8 @@ func (s *BillingCacheService) checkUserPlatformQuotaEligibility(
 		// 避免在 Redis 异常期做一次注定失败的 SET。
 		if s.cache != nil && cacheErr == nil {
 			now := time.Now()
-			startOfDay := timezone.StartOfDay(now)
-			startOfWeek := timezone.StartOfWeek(now)
+			startOfDay := timezone.StartOfQuotaDay(now)
+			startOfWeek := timezone.StartOfQuotaWeek(now)
 			sentinel := &UserPlatformQuotaCacheEntry{
 				SchemaVersion:      UserPlatformQuotaCacheSchemaV1,
 				DailyWindowStart:   &startOfDay,
@@ -1241,10 +1343,10 @@ func (s *BillingCacheService) checkUserPlatformQuotaEligibility(
 	dailyUsage := rec.DailyUsageUSD
 	weeklyUsage := rec.WeeklyUsageUSD
 	monthlyUsage := rec.MonthlyUsageUSD
-	if quotaWindowExpired(rec.DailyWindowStart, timezone.StartOfDay(now)) {
+	if quotaWindowExpired(rec.DailyWindowStart, timezone.StartOfQuotaDay(now)) {
 		dailyUsage = 0
 	}
-	if quotaWindowExpired(rec.WeeklyWindowStart, timezone.StartOfWeek(now)) {
+	if quotaWindowExpired(rec.WeeklyWindowStart, timezone.StartOfQuotaWeek(now)) {
 		weeklyUsage = 0
 	}
 	if monthlyQuotaWindowExpired(rec.MonthlyWindowStart, now) {
@@ -1316,13 +1418,13 @@ func withWindowResetsMetadata(err error, resetAt time.Time) error {
 // nextDailyReset 计算下一个日窗口起点（次日全局时区 0 点）。
 // 必须与 timezone.StartOfDay 同口径，否则 Retry-After 会偏差。
 func nextDailyReset(now time.Time) time.Time {
-	return timezone.StartOfDay(now).AddDate(0, 0, 1)
+	return timezone.StartOfQuotaDay(now).AddDate(0, 0, 1)
 }
 
 // nextWeeklyReset 计算下一个周窗口起点（下周一全局时区 0 点）。
 // 必须与 timezone.StartOfWeek 同口径，否则 Retry-After 会偏差。
 func nextWeeklyReset(now time.Time) time.Time {
-	return timezone.StartOfWeek(now).AddDate(0, 0, 7)
+	return timezone.StartOfQuotaWeek(now).AddDate(0, 0, 7)
 }
 
 // nextMonthlyResetFrom 返回 30 天滚动窗口的下次重置时间（start + 30d）。

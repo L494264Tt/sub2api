@@ -49,10 +49,29 @@ export interface BatchUpdateUserLimitsRequest {
   all?: boolean
   concurrency?: number
   rpm_limit?: number
+  token_limit_1d?: number
+  token_limit_7d?: number
+  token_limit_30d?: number
+  reset_token_quota?: boolean
 }
 
 export interface BatchUpdateUserLimitsResponse {
   affected: number
+}
+
+export interface BatchAdjustPlatformQuotaUsageRequest {
+  user_ids: number[]
+  all?: boolean
+  platform: PlatformQuotaPlatform
+  daily_usage_usd?: number
+  weekly_usage_usd?: number
+}
+
+export interface BatchAdjustPlatformQuotaUsageResponse {
+  affected: number
+  platform: PlatformQuotaPlatform
+  daily_window_start?: string
+  weekly_window_start?: string
 }
 
 /**
@@ -201,6 +220,17 @@ export async function batchUpdateLimits(
 ): Promise<BatchUpdateUserLimitsResponse> {
   const { data } = await apiClient.post<BatchUpdateUserLimitsResponse>(
     '/admin/users/batch-limits',
+    request
+  )
+  return data
+}
+
+/** Overwrite daily and/or weekly per-platform usage for multiple users. */
+export async function batchAdjustPlatformQuotaUsage(
+  request: BatchAdjustPlatformQuotaUsageRequest
+): Promise<BatchAdjustPlatformQuotaUsageResponse> {
+  const { data } = await apiClient.post<BatchAdjustPlatformQuotaUsageResponse>(
+    '/admin/users/batch-platform-quota-usage',
     request
   )
   return data
@@ -408,6 +438,7 @@ export const usersAPI = {
   updateBalance,
   updateConcurrency,
   batchUpdateLimits,
+  batchAdjustPlatformQuotaUsage,
   toggleStatus,
   getUserApiKeys,
   getUserUsageStats,

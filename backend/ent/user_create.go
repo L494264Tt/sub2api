@@ -24,6 +24,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 )
 
 // UserCreate is the builder for creating a User entity.
@@ -368,6 +369,68 @@ func (_c *UserCreate) SetNillableRpmLimit(v *int) *UserCreate {
 	return _c
 }
 
+// SetTokenLimit1d sets the "token_limit_1d" field.
+func (_c *UserCreate) SetTokenLimit1d(v int64) *UserCreate {
+	_c.mutation.SetTokenLimit1d(v)
+	return _c
+}
+
+// SetNillableTokenLimit1d sets the "token_limit_1d" field if the given value is not nil.
+func (_c *UserCreate) SetNillableTokenLimit1d(v *int64) *UserCreate {
+	if v != nil {
+		_c.SetTokenLimit1d(*v)
+	}
+	return _c
+}
+
+// SetTokenLimit7d sets the "token_limit_7d" field.
+func (_c *UserCreate) SetTokenLimit7d(v int64) *UserCreate {
+	_c.mutation.SetTokenLimit7d(v)
+	return _c
+}
+
+// SetNillableTokenLimit7d sets the "token_limit_7d" field if the given value is not nil.
+func (_c *UserCreate) SetNillableTokenLimit7d(v *int64) *UserCreate {
+	if v != nil {
+		_c.SetTokenLimit7d(*v)
+	}
+	return _c
+}
+
+// SetTokenLimit30d sets the "token_limit_30d" field.
+func (_c *UserCreate) SetTokenLimit30d(v int64) *UserCreate {
+	_c.mutation.SetTokenLimit30d(v)
+	return _c
+}
+
+// SetNillableTokenLimit30d sets the "token_limit_30d" field if the given value is not nil.
+func (_c *UserCreate) SetNillableTokenLimit30d(v *int64) *UserCreate {
+	if v != nil {
+		_c.SetTokenLimit30d(*v)
+	}
+	return _c
+}
+
+// SetTokenQuotaStartedAt sets the "token_quota_started_at" field.
+func (_c *UserCreate) SetTokenQuotaStartedAt(v time.Time) *UserCreate {
+	_c.mutation.SetTokenQuotaStartedAt(v)
+	return _c
+}
+
+// SetNillableTokenQuotaStartedAt sets the "token_quota_started_at" field if the given value is not nil.
+func (_c *UserCreate) SetNillableTokenQuotaStartedAt(v *time.Time) *UserCreate {
+	if v != nil {
+		_c.SetTokenQuotaStartedAt(*v)
+	}
+	return _c
+}
+
+// SetModelRestrictions sets the "model_restrictions" field.
+func (_c *UserCreate) SetModelRestrictions(v []domain.UserModelRestriction) *UserCreate {
+	_c.mutation.SetModelRestrictions(v)
+	return _c
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_c *UserCreate) AddAPIKeyIDs(ids ...int64) *UserCreate {
 	_c.mutation.AddAPIKeyIDs(ids...)
@@ -674,6 +737,29 @@ func (_c *UserCreate) defaults() error {
 		v := user.DefaultRpmLimit
 		_c.mutation.SetRpmLimit(v)
 	}
+	if _, ok := _c.mutation.TokenLimit1d(); !ok {
+		v := user.DefaultTokenLimit1d
+		_c.mutation.SetTokenLimit1d(v)
+	}
+	if _, ok := _c.mutation.TokenLimit7d(); !ok {
+		v := user.DefaultTokenLimit7d
+		_c.mutation.SetTokenLimit7d(v)
+	}
+	if _, ok := _c.mutation.TokenLimit30d(); !ok {
+		v := user.DefaultTokenLimit30d
+		_c.mutation.SetTokenLimit30d(v)
+	}
+	if _, ok := _c.mutation.TokenQuotaStartedAt(); !ok {
+		if user.DefaultTokenQuotaStartedAt == nil {
+			return fmt.Errorf("ent: uninitialized user.DefaultTokenQuotaStartedAt (forgotten import ent/runtime?)")
+		}
+		v := user.DefaultTokenQuotaStartedAt()
+		_c.mutation.SetTokenQuotaStartedAt(v)
+	}
+	if _, ok := _c.mutation.ModelRestrictions(); !ok {
+		v := user.DefaultModelRestrictions
+		_c.mutation.SetModelRestrictions(v)
+	}
 	return nil
 }
 
@@ -765,6 +851,21 @@ func (_c *UserCreate) check() error {
 	}
 	if _, ok := _c.mutation.RpmLimit(); !ok {
 		return &ValidationError{Name: "rpm_limit", err: errors.New(`ent: missing required field "User.rpm_limit"`)}
+	}
+	if _, ok := _c.mutation.TokenLimit1d(); !ok {
+		return &ValidationError{Name: "token_limit_1d", err: errors.New(`ent: missing required field "User.token_limit_1d"`)}
+	}
+	if _, ok := _c.mutation.TokenLimit7d(); !ok {
+		return &ValidationError{Name: "token_limit_7d", err: errors.New(`ent: missing required field "User.token_limit_7d"`)}
+	}
+	if _, ok := _c.mutation.TokenLimit30d(); !ok {
+		return &ValidationError{Name: "token_limit_30d", err: errors.New(`ent: missing required field "User.token_limit_30d"`)}
+	}
+	if _, ok := _c.mutation.TokenQuotaStartedAt(); !ok {
+		return &ValidationError{Name: "token_quota_started_at", err: errors.New(`ent: missing required field "User.token_quota_started_at"`)}
+	}
+	if _, ok := _c.mutation.ModelRestrictions(); !ok {
+		return &ValidationError{Name: "model_restrictions", err: errors.New(`ent: missing required field "User.model_restrictions"`)}
 	}
 	return nil
 }
@@ -892,6 +993,26 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RpmLimit(); ok {
 		_spec.SetField(user.FieldRpmLimit, field.TypeInt, value)
 		_node.RpmLimit = value
+	}
+	if value, ok := _c.mutation.TokenLimit1d(); ok {
+		_spec.SetField(user.FieldTokenLimit1d, field.TypeInt64, value)
+		_node.TokenLimit1d = value
+	}
+	if value, ok := _c.mutation.TokenLimit7d(); ok {
+		_spec.SetField(user.FieldTokenLimit7d, field.TypeInt64, value)
+		_node.TokenLimit7d = value
+	}
+	if value, ok := _c.mutation.TokenLimit30d(); ok {
+		_spec.SetField(user.FieldTokenLimit30d, field.TypeInt64, value)
+		_node.TokenLimit30d = value
+	}
+	if value, ok := _c.mutation.TokenQuotaStartedAt(); ok {
+		_spec.SetField(user.FieldTokenQuotaStartedAt, field.TypeTime, value)
+		_node.TokenQuotaStartedAt = value
+	}
+	if value, ok := _c.mutation.ModelRestrictions(); ok {
+		_spec.SetField(user.FieldModelRestrictions, field.TypeJSON, value)
+		_node.ModelRestrictions = value
 	}
 	if nodes := _c.mutation.APIKeysIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -1517,6 +1638,84 @@ func (u *UserUpsert) AddRpmLimit(v int) *UserUpsert {
 	return u
 }
 
+// SetTokenLimit1d sets the "token_limit_1d" field.
+func (u *UserUpsert) SetTokenLimit1d(v int64) *UserUpsert {
+	u.Set(user.FieldTokenLimit1d, v)
+	return u
+}
+
+// UpdateTokenLimit1d sets the "token_limit_1d" field to the value that was provided on create.
+func (u *UserUpsert) UpdateTokenLimit1d() *UserUpsert {
+	u.SetExcluded(user.FieldTokenLimit1d)
+	return u
+}
+
+// AddTokenLimit1d adds v to the "token_limit_1d" field.
+func (u *UserUpsert) AddTokenLimit1d(v int64) *UserUpsert {
+	u.Add(user.FieldTokenLimit1d, v)
+	return u
+}
+
+// SetTokenLimit7d sets the "token_limit_7d" field.
+func (u *UserUpsert) SetTokenLimit7d(v int64) *UserUpsert {
+	u.Set(user.FieldTokenLimit7d, v)
+	return u
+}
+
+// UpdateTokenLimit7d sets the "token_limit_7d" field to the value that was provided on create.
+func (u *UserUpsert) UpdateTokenLimit7d() *UserUpsert {
+	u.SetExcluded(user.FieldTokenLimit7d)
+	return u
+}
+
+// AddTokenLimit7d adds v to the "token_limit_7d" field.
+func (u *UserUpsert) AddTokenLimit7d(v int64) *UserUpsert {
+	u.Add(user.FieldTokenLimit7d, v)
+	return u
+}
+
+// SetTokenLimit30d sets the "token_limit_30d" field.
+func (u *UserUpsert) SetTokenLimit30d(v int64) *UserUpsert {
+	u.Set(user.FieldTokenLimit30d, v)
+	return u
+}
+
+// UpdateTokenLimit30d sets the "token_limit_30d" field to the value that was provided on create.
+func (u *UserUpsert) UpdateTokenLimit30d() *UserUpsert {
+	u.SetExcluded(user.FieldTokenLimit30d)
+	return u
+}
+
+// AddTokenLimit30d adds v to the "token_limit_30d" field.
+func (u *UserUpsert) AddTokenLimit30d(v int64) *UserUpsert {
+	u.Add(user.FieldTokenLimit30d, v)
+	return u
+}
+
+// SetTokenQuotaStartedAt sets the "token_quota_started_at" field.
+func (u *UserUpsert) SetTokenQuotaStartedAt(v time.Time) *UserUpsert {
+	u.Set(user.FieldTokenQuotaStartedAt, v)
+	return u
+}
+
+// UpdateTokenQuotaStartedAt sets the "token_quota_started_at" field to the value that was provided on create.
+func (u *UserUpsert) UpdateTokenQuotaStartedAt() *UserUpsert {
+	u.SetExcluded(user.FieldTokenQuotaStartedAt)
+	return u
+}
+
+// SetModelRestrictions sets the "model_restrictions" field.
+func (u *UserUpsert) SetModelRestrictions(v []domain.UserModelRestriction) *UserUpsert {
+	u.Set(user.FieldModelRestrictions, v)
+	return u
+}
+
+// UpdateModelRestrictions sets the "model_restrictions" field to the value that was provided on create.
+func (u *UserUpsert) UpdateModelRestrictions() *UserUpsert {
+	u.SetExcluded(user.FieldModelRestrictions)
+	return u
+}
+
 // UpdateNewValues updates the mutable fields using the new values that were set on create.
 // Using this option is equivalent to using:
 //
@@ -1979,6 +2178,97 @@ func (u *UserUpsertOne) AddRpmLimit(v int) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateRpmLimit() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateRpmLimit()
+	})
+}
+
+// SetTokenLimit1d sets the "token_limit_1d" field.
+func (u *UserUpsertOne) SetTokenLimit1d(v int64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetTokenLimit1d(v)
+	})
+}
+
+// AddTokenLimit1d adds v to the "token_limit_1d" field.
+func (u *UserUpsertOne) AddTokenLimit1d(v int64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.AddTokenLimit1d(v)
+	})
+}
+
+// UpdateTokenLimit1d sets the "token_limit_1d" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateTokenLimit1d() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateTokenLimit1d()
+	})
+}
+
+// SetTokenLimit7d sets the "token_limit_7d" field.
+func (u *UserUpsertOne) SetTokenLimit7d(v int64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetTokenLimit7d(v)
+	})
+}
+
+// AddTokenLimit7d adds v to the "token_limit_7d" field.
+func (u *UserUpsertOne) AddTokenLimit7d(v int64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.AddTokenLimit7d(v)
+	})
+}
+
+// UpdateTokenLimit7d sets the "token_limit_7d" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateTokenLimit7d() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateTokenLimit7d()
+	})
+}
+
+// SetTokenLimit30d sets the "token_limit_30d" field.
+func (u *UserUpsertOne) SetTokenLimit30d(v int64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetTokenLimit30d(v)
+	})
+}
+
+// AddTokenLimit30d adds v to the "token_limit_30d" field.
+func (u *UserUpsertOne) AddTokenLimit30d(v int64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.AddTokenLimit30d(v)
+	})
+}
+
+// UpdateTokenLimit30d sets the "token_limit_30d" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateTokenLimit30d() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateTokenLimit30d()
+	})
+}
+
+// SetTokenQuotaStartedAt sets the "token_quota_started_at" field.
+func (u *UserUpsertOne) SetTokenQuotaStartedAt(v time.Time) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetTokenQuotaStartedAt(v)
+	})
+}
+
+// UpdateTokenQuotaStartedAt sets the "token_quota_started_at" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateTokenQuotaStartedAt() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateTokenQuotaStartedAt()
+	})
+}
+
+// SetModelRestrictions sets the "model_restrictions" field.
+func (u *UserUpsertOne) SetModelRestrictions(v []domain.UserModelRestriction) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetModelRestrictions(v)
+	})
+}
+
+// UpdateModelRestrictions sets the "model_restrictions" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateModelRestrictions() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateModelRestrictions()
 	})
 }
 
@@ -2610,6 +2900,97 @@ func (u *UserUpsertBulk) AddRpmLimit(v int) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateRpmLimit() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateRpmLimit()
+	})
+}
+
+// SetTokenLimit1d sets the "token_limit_1d" field.
+func (u *UserUpsertBulk) SetTokenLimit1d(v int64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetTokenLimit1d(v)
+	})
+}
+
+// AddTokenLimit1d adds v to the "token_limit_1d" field.
+func (u *UserUpsertBulk) AddTokenLimit1d(v int64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.AddTokenLimit1d(v)
+	})
+}
+
+// UpdateTokenLimit1d sets the "token_limit_1d" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateTokenLimit1d() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateTokenLimit1d()
+	})
+}
+
+// SetTokenLimit7d sets the "token_limit_7d" field.
+func (u *UserUpsertBulk) SetTokenLimit7d(v int64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetTokenLimit7d(v)
+	})
+}
+
+// AddTokenLimit7d adds v to the "token_limit_7d" field.
+func (u *UserUpsertBulk) AddTokenLimit7d(v int64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.AddTokenLimit7d(v)
+	})
+}
+
+// UpdateTokenLimit7d sets the "token_limit_7d" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateTokenLimit7d() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateTokenLimit7d()
+	})
+}
+
+// SetTokenLimit30d sets the "token_limit_30d" field.
+func (u *UserUpsertBulk) SetTokenLimit30d(v int64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetTokenLimit30d(v)
+	})
+}
+
+// AddTokenLimit30d adds v to the "token_limit_30d" field.
+func (u *UserUpsertBulk) AddTokenLimit30d(v int64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.AddTokenLimit30d(v)
+	})
+}
+
+// UpdateTokenLimit30d sets the "token_limit_30d" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateTokenLimit30d() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateTokenLimit30d()
+	})
+}
+
+// SetTokenQuotaStartedAt sets the "token_quota_started_at" field.
+func (u *UserUpsertBulk) SetTokenQuotaStartedAt(v time.Time) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetTokenQuotaStartedAt(v)
+	})
+}
+
+// UpdateTokenQuotaStartedAt sets the "token_quota_started_at" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateTokenQuotaStartedAt() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateTokenQuotaStartedAt()
+	})
+}
+
+// SetModelRestrictions sets the "model_restrictions" field.
+func (u *UserUpsertBulk) SetModelRestrictions(v []domain.UserModelRestriction) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetModelRestrictions(v)
+	})
+}
+
+// UpdateModelRestrictions sets the "model_restrictions" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateModelRestrictions() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateModelRestrictions()
 	})
 }
 

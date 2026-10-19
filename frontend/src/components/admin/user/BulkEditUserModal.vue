@@ -60,10 +60,157 @@
             </p>
           </div>
         </div>
+
+        <div class="space-y-3 py-4">
+          <div class="flex items-center justify-between gap-4">
+            <label for="bulk-token-limit-1d" class="input-label mb-0">
+              {{ t('admin.users.bulkLimits.gptTokenLimits') }}
+            </label>
+            <Toggle
+              v-model="enableTokenLimits"
+              :aria-label="t('admin.users.bulkLimits.enableTokenLimits')"
+              data-test="enable-token-limits"
+            />
+          </div>
+          <div v-if="enableTokenLimits" class="grid gap-3 sm:grid-cols-3">
+            <div>
+              <label for="bulk-token-limit-1d" class="input-label">
+                {{ t('admin.users.bulkLimits.tokenLimit1d') }}
+              </label>
+              <input
+                id="bulk-token-limit-1d"
+                v-model="tokenLimit1dValue"
+                type="number"
+                min="0"
+                step="1"
+                class="input"
+                :placeholder="t('admin.users.bulkLimits.leaveUnchanged')"
+                data-test="token-limit-1d-input"
+              />
+            </div>
+            <div>
+              <label for="bulk-token-limit-7d" class="input-label">
+                {{ t('admin.users.bulkLimits.tokenLimit7d') }}
+              </label>
+              <input
+                id="bulk-token-limit-7d"
+                v-model="tokenLimit7dValue"
+                type="number"
+                min="0"
+                step="1"
+                class="input"
+                :placeholder="t('admin.users.bulkLimits.leaveUnchanged')"
+                data-test="token-limit-7d-input"
+              />
+            </div>
+            <div>
+              <label for="bulk-token-limit-30d" class="input-label">
+                {{ t('admin.users.bulkLimits.tokenLimit30d') }}
+              </label>
+              <input
+                id="bulk-token-limit-30d"
+                v-model="tokenLimit30dValue"
+                type="number"
+                min="0"
+                step="1"
+                class="input"
+                :placeholder="t('admin.users.bulkLimits.leaveUnchanged')"
+                data-test="token-limit-30d-input"
+              />
+            </div>
+          </div>
+          <p v-if="enableTokenLimits" class="input-hint">
+            {{ t('admin.users.bulkLimits.tokenLimitsHint') }}
+          </p>
+          <div class="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/60 dark:bg-amber-950/20 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p class="text-sm font-medium text-gray-800 dark:text-gray-200">
+                {{ t('admin.users.bulkLimits.resetTokenQuota') }}
+              </p>
+              <p class="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                {{ t('admin.users.bulkLimits.resetTokenQuotaHint') }}
+              </p>
+            </div>
+            <button
+              type="button"
+              class="btn btn-secondary shrink-0"
+              :disabled="!canResetTokenQuota"
+              data-test="reset-token-quota"
+              @click="handleResetTokenQuota"
+            >
+              {{ resettingTokenQuota
+                ? t('admin.users.bulkLimits.resettingTokenQuota')
+                : t('admin.users.bulkLimits.resetTokenQuota') }}
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-3 py-4">
+          <div class="flex items-center justify-between gap-4">
+            <label for="bulk-platform-quota-platform" class="input-label mb-0">
+              {{ t('admin.users.bulkLimits.platformUsageTitle') }}
+            </label>
+            <Toggle
+              v-model="enablePlatformUsage"
+              :aria-label="t('admin.users.bulkLimits.enablePlatformUsage')"
+              data-test="enable-platform-usage"
+            />
+          </div>
+          <div v-if="enablePlatformUsage" class="grid gap-3 sm:grid-cols-3">
+            <div>
+              <label for="bulk-platform-quota-platform" class="input-label">
+                {{ t('admin.users.platformQuota.columns.platform') }}
+              </label>
+              <select
+                id="bulk-platform-quota-platform"
+                v-model="platformUsagePlatform"
+                class="input"
+                data-test="platform-usage-platform"
+              >
+                <option v-for="platform in PLATFORM_OPTIONS" :key="platform" :value="platform">
+                  {{ platform }}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label for="bulk-daily-usage" class="input-label">
+                {{ t('admin.users.bulkLimits.dailyUsage') }}
+              </label>
+              <input
+                id="bulk-daily-usage"
+                v-model="dailyUsageValue"
+                type="number"
+                min="0"
+                step="0.000001"
+                class="input"
+                :placeholder="t('admin.users.bulkLimits.leaveUnchanged')"
+                data-test="daily-usage-input"
+              />
+            </div>
+            <div>
+              <label for="bulk-weekly-usage" class="input-label">
+                {{ t('admin.users.bulkLimits.weeklyUsage') }}
+              </label>
+              <input
+                id="bulk-weekly-usage"
+                v-model="weeklyUsageValue"
+                type="number"
+                min="0"
+                step="0.000001"
+                class="input"
+                :placeholder="t('admin.users.bulkLimits.leaveUnchanged')"
+                data-test="weekly-usage-input"
+              />
+            </div>
+          </div>
+          <p v-if="enablePlatformUsage" class="input-hint">
+            {{ t('admin.users.bulkLimits.platformUsageHint') }}
+          </p>
+        </div>
       </div>
 
       <p v-if="hasInvalidValue" class="text-sm text-red-600 dark:text-red-400">
-        {{ t('admin.users.bulkLimits.nonNegativeInteger') }}
+        {{ t('admin.users.bulkLimits.invalidValue') }}
       </p>
       <p v-if="selectionTooLarge" class="text-sm text-red-600 dark:text-red-400">
         {{ t('admin.users.bulkLimits.selectionLimit', { max: MAX_BATCH_USER_IDS }) }}
@@ -93,7 +240,11 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
-import type { BatchUpdateUserLimitsRequest } from '@/api/admin/users'
+import type {
+  BatchAdjustPlatformQuotaUsageRequest,
+  BatchUpdateUserLimitsRequest,
+  PlatformQuotaPlatform
+} from '@/api/admin/users'
 import { useAppStore } from '@/stores/app'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Toggle from '@/components/common/Toggle.vue'
@@ -112,10 +263,20 @@ const { t } = useI18n()
 const appStore = useAppStore()
 const enableConcurrency = ref(false)
 const enableRPMLimit = ref(false)
+const enableTokenLimits = ref(false)
+const enablePlatformUsage = ref(false)
 const concurrencyValue = ref<string | number>('')
 const rpmLimitValue = ref<string | number>('')
+const tokenLimit1dValue = ref<string | number>('')
+const tokenLimit7dValue = ref<string | number>('')
+const tokenLimit30dValue = ref<string | number>('')
+const dailyUsageValue = ref<string | number>('')
+const weeklyUsageValue = ref<string | number>('')
+const platformUsagePlatform = ref<PlatformQuotaPlatform>('openai')
 const submitting = ref(false)
+const resettingTokenQuota = ref(false)
 const MAX_BATCH_USER_IDS = 500
+const PLATFORM_OPTIONS: PlatformQuotaPlatform[] = ['anthropic', 'openai', 'gemini', 'antigravity', 'grok']
 
 const parseLimit = (value: string | number): number | null | undefined => {
   const trimmed = String(value).trim()
@@ -125,18 +286,52 @@ const parseLimit = (value: string | number): number | null | undefined => {
   return parsed
 }
 
+const parseUsage = (value: string | number): number | null | undefined => {
+  const trimmed = String(value).trim()
+  if (!trimmed) return undefined
+  const parsed = Number(trimmed)
+  if (!Number.isFinite(parsed) || parsed < 0) return null
+  return parsed
+}
+
 const parsedConcurrency = computed(() =>
   enableConcurrency.value ? parseLimit(concurrencyValue.value) : undefined
 )
 const parsedRPMLimit = computed(() =>
   enableRPMLimit.value ? parseLimit(rpmLimitValue.value) : undefined
 )
+const parsedTokenLimit1d = computed(() =>
+  enableTokenLimits.value ? parseLimit(tokenLimit1dValue.value) : undefined
+)
+const parsedTokenLimit7d = computed(() =>
+  enableTokenLimits.value ? parseLimit(tokenLimit7dValue.value) : undefined
+)
+const parsedTokenLimit30d = computed(() =>
+  enableTokenLimits.value ? parseLimit(tokenLimit30dValue.value) : undefined
+)
+const parsedDailyUsage = computed(() =>
+  enablePlatformUsage.value ? parseUsage(dailyUsageValue.value) : undefined
+)
+const parsedWeeklyUsage = computed(() =>
+  enablePlatformUsage.value ? parseUsage(weeklyUsageValue.value) : undefined
+)
 const hasInvalidValue = computed(() =>
-  parsedConcurrency.value === null || parsedRPMLimit.value === null
+  parsedConcurrency.value === null
+  || parsedRPMLimit.value === null
+  || parsedTokenLimit1d.value === null
+  || parsedTokenLimit7d.value === null
+  || parsedTokenLimit30d.value === null
+  || parsedDailyUsage.value === null
+  || parsedWeeklyUsage.value === null
 )
 const hasUpdate = computed(() =>
   (parsedConcurrency.value !== undefined && parsedConcurrency.value !== null)
   || (parsedRPMLimit.value !== undefined && parsedRPMLimit.value !== null)
+  || (parsedTokenLimit1d.value !== undefined && parsedTokenLimit1d.value !== null)
+  || (parsedTokenLimit7d.value !== undefined && parsedTokenLimit7d.value !== null)
+  || (parsedTokenLimit30d.value !== undefined && parsedTokenLimit30d.value !== null)
+  || (parsedDailyUsage.value !== undefined && parsedDailyUsage.value !== null)
+  || (parsedWeeklyUsage.value !== undefined && parsedWeeklyUsage.value !== null)
 )
 const selectionTooLarge = computed(() => props.selectedIds.length > MAX_BATCH_USER_IDS)
 const canSubmit = computed(() =>
@@ -145,14 +340,30 @@ const canSubmit = computed(() =>
   && hasUpdate.value
   && !hasInvalidValue.value
   && !submitting.value
+  && !resettingTokenQuota.value
+)
+const canResetTokenQuota = computed(() =>
+  props.selectedIds.length > 0
+  && !selectionTooLarge.value
+  && !submitting.value
+  && !resettingTokenQuota.value
 )
 
 const reset = () => {
   enableConcurrency.value = false
   enableRPMLimit.value = false
+  enableTokenLimits.value = false
+  enablePlatformUsage.value = false
   concurrencyValue.value = ''
   rpmLimitValue.value = ''
+  tokenLimit1dValue.value = ''
+  tokenLimit7dValue.value = ''
+  tokenLimit30dValue.value = ''
+  dailyUsageValue.value = ''
+  weeklyUsageValue.value = ''
+  platformUsagePlatform.value = 'openai'
   submitting.value = false
+  resettingTokenQuota.value = false
 }
 
 watch(
@@ -165,24 +376,55 @@ watch(
 const handleSubmit = async () => {
   if (!canSubmit.value) return
 
-  const request: BatchUpdateUserLimitsRequest = {
+  const fields: string[] = []
+  const limitRequest: BatchUpdateUserLimitsRequest = {
     user_ids: [...props.selectedIds],
     all: false
   }
-  const fields: string[] = []
   if (parsedConcurrency.value !== undefined && parsedConcurrency.value !== null) {
-    request.concurrency = parsedConcurrency.value
+    limitRequest.concurrency = parsedConcurrency.value
     fields.push(
       t('admin.users.bulkLimits.concurrencyValue', { value: parsedConcurrency.value })
     )
   }
   if (parsedRPMLimit.value !== undefined && parsedRPMLimit.value !== null) {
-    request.rpm_limit = parsedRPMLimit.value
+    limitRequest.rpm_limit = parsedRPMLimit.value
     fields.push(
       parsedRPMLimit.value === 0
         ? t('admin.users.bulkLimits.rpmUnlimitedValue')
         : t('admin.users.bulkLimits.rpmValue', { value: parsedRPMLimit.value })
     )
+  }
+  if (parsedTokenLimit1d.value !== undefined && parsedTokenLimit1d.value !== null) {
+    limitRequest.token_limit_1d = parsedTokenLimit1d.value
+    fields.push(t('admin.users.bulkLimits.tokenLimit1dValue', { value: parsedTokenLimit1d.value }))
+  }
+  if (parsedTokenLimit7d.value !== undefined && parsedTokenLimit7d.value !== null) {
+    limitRequest.token_limit_7d = parsedTokenLimit7d.value
+    fields.push(t('admin.users.bulkLimits.tokenLimit7dValue', { value: parsedTokenLimit7d.value }))
+  }
+  if (parsedTokenLimit30d.value !== undefined && parsedTokenLimit30d.value !== null) {
+    limitRequest.token_limit_30d = parsedTokenLimit30d.value
+    fields.push(t('admin.users.bulkLimits.tokenLimit30dValue', { value: parsedTokenLimit30d.value }))
+  }
+  const usageRequest: BatchAdjustPlatformQuotaUsageRequest = {
+    user_ids: [...props.selectedIds],
+    all: false,
+    platform: platformUsagePlatform.value
+  }
+  if (parsedDailyUsage.value !== undefined && parsedDailyUsage.value !== null) {
+    usageRequest.daily_usage_usd = parsedDailyUsage.value
+    fields.push(t('admin.users.bulkLimits.dailyUsageValue', {
+      platform: platformUsagePlatform.value,
+      value: parsedDailyUsage.value
+    }))
+  }
+  if (parsedWeeklyUsage.value !== undefined && parsedWeeklyUsage.value !== null) {
+    usageRequest.weekly_usage_usd = parsedWeeklyUsage.value
+    fields.push(t('admin.users.bulkLimits.weeklyUsageValue', {
+      platform: platformUsagePlatform.value,
+      value: parsedWeeklyUsage.value
+    }))
   }
 
   const confirmed = window.confirm(
@@ -195,11 +437,25 @@ const handleSubmit = async () => {
 
   submitting.value = true
   try {
-    const result = await adminAPI.users.batchUpdateLimits(request)
+    let affected = 0
+    if (
+      limitRequest.concurrency !== undefined
+      || limitRequest.rpm_limit !== undefined
+      || limitRequest.token_limit_1d !== undefined
+      || limitRequest.token_limit_7d !== undefined
+      || limitRequest.token_limit_30d !== undefined
+    ) {
+      const result = await adminAPI.users.batchUpdateLimits(limitRequest)
+      affected = Math.max(affected, result.affected)
+    }
+    if (usageRequest.daily_usage_usd !== undefined || usageRequest.weekly_usage_usd !== undefined) {
+      const result = await adminAPI.users.batchAdjustPlatformQuotaUsage(usageRequest)
+      affected = Math.max(affected, result.affected)
+    }
     appStore.showSuccess(
-      t('admin.users.bulkLimits.success', { count: result.affected })
+      t('admin.users.bulkLimits.success', { count: affected })
     )
-    emit('success', result.affected)
+    emit('success', affected)
     emit('close')
   } catch (error: any) {
     appStore.showError(
@@ -209,6 +465,39 @@ const handleSubmit = async () => {
     )
   } finally {
     submitting.value = false
+  }
+}
+
+const handleResetTokenQuota = async () => {
+  if (!canResetTokenQuota.value) return
+
+  const confirmed = window.confirm(
+    t('admin.users.bulkLimits.resetTokenQuotaConfirm', {
+      count: props.selectedIds.length
+    })
+  )
+  if (!confirmed) return
+
+  resettingTokenQuota.value = true
+  try {
+    const result = await adminAPI.users.batchUpdateLimits({
+      user_ids: [...props.selectedIds],
+      all: false,
+      reset_token_quota: true
+    })
+    appStore.showSuccess(
+      t('admin.users.bulkLimits.resetTokenQuotaSuccess', { count: result.affected })
+    )
+    emit('success', result.affected)
+    emit('close')
+  } catch (error: any) {
+    appStore.showError(
+      error.response?.data?.message
+      || error.response?.data?.detail
+      || t('admin.users.bulkLimits.resetTokenQuotaFailed')
+    )
+  } finally {
+    resettingTokenQuota.value = false
   }
 }
 </script>

@@ -430,6 +430,10 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 	reqModel := modelResult.String()
+	if err := service.CheckUserModelAccess(apiKey.User, reqModel, body); err != nil {
+		h.errorResponse(c, http.StatusForbidden, "permission_error", "This model or reasoning effort is not allowed for this user")
+		return
+	}
 	ensureCompositeTargetPlatform(c, apiKey, reqModel)
 	if !openAICompatibleTextTargetAllowed(c, apiKey, reqModel) {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Model is not supported by this OpenAI-compatible endpoint for composite groups")
@@ -1147,6 +1151,10 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		return
 	}
 	reqModel := modelResult.String()
+	if err := service.CheckUserModelAccess(apiKey.User, reqModel, body); err != nil {
+		h.anthropicErrorResponse(c, http.StatusForbidden, "permission_error", "This model or reasoning effort is not allowed for this user")
+		return
+	}
 	ensureCompositeTargetPlatform(c, apiKey, reqModel)
 	if !openAICompatibleTextTargetAllowed(c, apiKey, reqModel) {
 		h.anthropicErrorResponse(c, http.StatusBadRequest, "invalid_request_error", "Model is not supported by this OpenAI-compatible endpoint for composite groups")
@@ -2288,6 +2296,10 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	)
 	setOpsRequestContext(c, reqModel, true)
 	setOpsEndpointContext(c, "", int16(service.RequestTypeWSV2))
+	if err := service.CheckUserModelAccess(apiKey.User, reqModel, firstMessage); err != nil {
+		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "model or reasoning effort is not allowed for this user")
+		return
+	}
 
 	if decision := h.checkSecurityAuditStage(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIResponses, reqModel, firstMessage, "first_turn"); decision != nil && !decision.AllowNextStage {
 		writeSecurityAuditWSError(ctx, wsConn, decision)
@@ -2679,6 +2691,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				}
 				if model == "" {
 					model = reqModel
+				}
+				if err := service.CheckUserModelAccess(apiKey.User, model, payload); err != nil {
+					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "model or reasoning effort is not allowed for this user", err)
 				}
 				if decision := h.checkSecurityAuditStage(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIResponses, model, payload, "subsequent_turn"); decision != nil && !decision.AllowNextStage {
 					writeSecurityAuditWSError(ctx, wsConn, decision)

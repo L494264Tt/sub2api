@@ -154,6 +154,10 @@ func (r *userRepository) create(ctx context.Context, userIn *service.User, guard
 		SetNillableLastActiveAt(userIn.LastActiveAt).
 		SetRpmLimit(userIn.RPMLimit).
 		SetRestrictPublicGroups(userIn.RestrictPublicGroups).
+		SetTokenLimit1d(userIn.TokenLimit1d).
+		SetTokenLimit7d(userIn.TokenLimit7d).
+		SetTokenLimit30d(userIn.TokenLimit30d).
+		SetModelRestrictions(userIn.ModelRestrictions).
 		Save(txCtx)
 	if err != nil {
 		return translatePersistenceError(err, nil, service.ErrEmailExists)
@@ -313,6 +317,18 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User, field
 	}
 	if fields.RPMLimit {
 		updateOp = updateOp.SetRpmLimit(userIn.RPMLimit)
+	}
+	if fields.TokenLimit1d {
+		updateOp = updateOp.SetTokenLimit1d(userIn.TokenLimit1d)
+	}
+	if fields.TokenLimit7d {
+		updateOp = updateOp.SetTokenLimit7d(userIn.TokenLimit7d)
+	}
+	if fields.TokenLimit30d {
+		updateOp = updateOp.SetTokenLimit30d(userIn.TokenLimit30d)
+	}
+	if fields.ModelRestrictions {
+		updateOp = updateOp.SetModelRestrictions(userIn.ModelRestrictions)
 	}
 	if fields.Status {
 		updateOp = updateOp.SetStatus(userIn.Status)
@@ -1101,13 +1117,13 @@ func (r *userRepository) BatchAddConcurrency(ctx context.Context, userIDs []int6
 	return int(affected), nil
 }
 
-func (r *userRepository) BatchUpdateLimits(ctx context.Context, userIDs []int64, concurrency, rpmLimit *int) (int, error) {
-	if len(userIDs) == 0 || (concurrency == nil && rpmLimit == nil) {
+func (r *userRepository) BatchUpdateLimits(ctx context.Context, userIDs []int64, concurrency, rpmLimit *int, tokenLimit1d, tokenLimit7d, tokenLimit30d *int64, resetTokenQuota bool) (int, error) {
+	if len(userIDs) == 0 || (concurrency == nil && rpmLimit == nil && tokenLimit1d == nil && tokenLimit7d == nil && tokenLimit30d == nil && !resetTokenQuota) {
 		return 0, nil
 	}
 
-	setClauses := make([]string, 0, 3)
-	args := make([]any, 0, 3)
+	setClauses := make([]string, 0, 6)
+	args := make([]any, 0, 6)
 	if concurrency != nil {
 		value := max(*concurrency, 0)
 		args = append(args, value)
@@ -1117,6 +1133,20 @@ func (r *userRepository) BatchUpdateLimits(ctx context.Context, userIDs []int64,
 		value := max(*rpmLimit, 0)
 		args = append(args, value)
 		setClauses = append(setClauses, fmt.Sprintf("rpm_limit = $%d", len(args)))
+	}
+	appendTokenLimit := func(column string, limit *int64) {
+		if limit == nil {
+			return
+		}
+		value := max(*limit, 0)
+		args = append(args, value)
+		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", column, len(args)))
+	}
+	appendTokenLimit("token_limit_1d", tokenLimit1d)
+	appendTokenLimit("token_limit_7d", tokenLimit7d)
+	appendTokenLimit("token_limit_30d", tokenLimit30d)
+	if resetTokenQuota {
+		setClauses = append(setClauses, "token_quota_started_at = NOW()")
 	}
 	setClauses = append(setClauses, "updated_at = NOW()")
 	args = append(args, pq.Array(userIDs))

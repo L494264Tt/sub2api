@@ -76,6 +76,10 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		return
 	}
 	reqModel := modelResult.String()
+	if err := service.CheckUserModelAccess(apiKey.User, reqModel, body); err != nil {
+		h.errorResponse(c, http.StatusForbidden, "permission_error", "This model or reasoning effort is not allowed for this user")
+		return
+	}
 	ensureCompositeTargetPlatform(c, apiKey, reqModel)
 	if !openAICompatibleTextTargetAllowed(c, apiKey, reqModel) {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Model is not supported by this OpenAI-compatible endpoint for composite groups")

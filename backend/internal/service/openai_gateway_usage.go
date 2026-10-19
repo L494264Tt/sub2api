@@ -477,6 +477,9 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 
 	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
 		writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.openai_gateway")
+		if user.HasTokenLimit() && s.billingCacheService != nil {
+			s.billingCacheService.IncrementUserTokenUsage(user.ID, user.TokenQuotaStartedAt, usageLog.RequestedModel, int64(usageLog.TotalTokens()))
+		}
 		logger.LegacyPrintf("service.openai_gateway", "[SIMPLE MODE] Usage recorded (not billed): user=%d, tokens=%d", usageLog.UserID, usageLog.TotalTokens())
 		s.deferredService.ScheduleLastUsedUpdate(account.ID)
 		return nil
@@ -489,8 +492,8 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		quotaPlatform = PlatformFromAPIKey(apiKey)
 	}
 
-	billingErr := func() error {
-		_, err := applyUsageBilling(ctx, requestID, usageLog, &postUsageBillingParams{
+	applied, billingErr := func() (bool, error) {
+		return applyUsageBilling(ctx, requestID, usageLog, &postUsageBillingParams{
 			Cost:                  cost,
 			User:                  user,
 			APIKey:                apiKey,
@@ -502,7 +505,6 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 			APIKeyService:         input.APIKeyService,
 			Platform:              quotaPlatform,
 		}, s.billingDeps(), s.usageBillingRepo)
-		return err
 	}()
 
 	if billingErr != nil {
@@ -511,6 +513,9 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		return billingErr
 	}
 	writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.openai_gateway")
+	if applied && user.HasTokenLimit() && s.billingCacheService != nil {
+		s.billingCacheService.IncrementUserTokenUsage(user.ID, user.TokenQuotaStartedAt, usageLog.RequestedModel, int64(usageLog.TotalTokens()))
+	}
 
 	return nil
 }

@@ -116,6 +116,36 @@ func StartOfWeek(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day()-weekday+1, 0, 0, 0, 0, loc)
 }
 
+const quotaWindowStartHour = 7
+
+// StartOfQuotaDay returns the platform quota day window start.
+// Quota windows start at 07:00 local time instead of calendar midnight.
+func StartOfQuotaDay(t time.Time) time.Time {
+	loc := Location()
+	t = t.In(loc)
+	start := time.Date(t.Year(), t.Month(), t.Day(), quotaWindowStartHour, 0, 0, 0, loc)
+	if t.Before(start) {
+		return start.AddDate(0, 0, -1)
+	}
+	return start
+}
+
+// StartOfQuotaWeek returns the platform quota week window start.
+// The week begins on Monday 07:00 local time.
+func StartOfQuotaWeek(t time.Time) time.Time {
+	loc := Location()
+	t = t.In(loc)
+	weekday := int(t.Weekday())
+	if weekday == 0 {
+		weekday = 7 // Sunday is day 7
+	}
+	monday := time.Date(t.Year(), t.Month(), t.Day()-weekday+1, quotaWindowStartHour, 0, 0, 0, loc)
+	if t.Before(monday) {
+		return monday.AddDate(0, 0, -7)
+	}
+	return monday
+}
+
 // StartOfMonth returns the start of the month (1st day 00:00:00) for the given time.
 func StartOfMonth(t time.Time) time.Time {
 	loc := Location()

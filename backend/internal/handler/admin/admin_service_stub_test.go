@@ -197,7 +197,7 @@ func (s *stubAdminService) BatchUpdateConcurrency(ctx context.Context, userIDs [
 	return len(userIDs), nil
 }
 
-func (s *stubAdminService) BatchUpdateLimits(ctx context.Context, userIDs []int64, concurrency, rpmLimit *int) (int, error) {
+func (s *stubAdminService) BatchUpdateLimits(ctx context.Context, userIDs []int64, concurrency, rpmLimit *int, tokenLimit1d, tokenLimit7d, tokenLimit30d *int64, resetTokenQuota bool) (int, error) {
 	return len(userIDs), nil
 }
 

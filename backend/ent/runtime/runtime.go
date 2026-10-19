@@ -2255,6 +2255,26 @@ func init() {
 	userDescRpmLimit := userFields[21].Descriptor()
 	// user.DefaultRpmLimit holds the default value on creation for the rpm_limit field.
 	user.DefaultRpmLimit = userDescRpmLimit.Default.(int)
+	// userDescTokenLimit1d is the schema descriptor for token_limit_1d field.
+	userDescTokenLimit1d := userFields[22].Descriptor()
+	// user.DefaultTokenLimit1d holds the default value on creation for the token_limit_1d field.
+	user.DefaultTokenLimit1d = userDescTokenLimit1d.Default.(int64)
+	// userDescTokenLimit7d is the schema descriptor for token_limit_7d field.
+	userDescTokenLimit7d := userFields[23].Descriptor()
+	// user.DefaultTokenLimit7d holds the default value on creation for the token_limit_7d field.
+	user.DefaultTokenLimit7d = userDescTokenLimit7d.Default.(int64)
+	// userDescTokenLimit30d is the schema descriptor for token_limit_30d field.
+	userDescTokenLimit30d := userFields[24].Descriptor()
+	// user.DefaultTokenLimit30d holds the default value on creation for the token_limit_30d field.
+	user.DefaultTokenLimit30d = userDescTokenLimit30d.Default.(int64)
+	// userDescTokenQuotaStartedAt is the schema descriptor for token_quota_started_at field.
+	userDescTokenQuotaStartedAt := userFields[25].Descriptor()
+	// user.DefaultTokenQuotaStartedAt holds the default value on creation for the token_quota_started_at field.
+	user.DefaultTokenQuotaStartedAt = userDescTokenQuotaStartedAt.Default.(func() time.Time)
+	// userDescModelRestrictions is the schema descriptor for model_restrictions field.
+	userDescModelRestrictions := userFields[26].Descriptor()
+	// user.DefaultModelRestrictions holds the default value on creation for the model_restrictions field.
+	user.DefaultModelRestrictions = userDescModelRestrictions.Default.([]domain.UserModelRestriction)
 	userallowedgroupFields := schema.UserAllowedGroup{}.Fields()
 	_ = userallowedgroupFields
 	// userallowedgroupDescCreatedAt is the schema descriptor for created_at field.
