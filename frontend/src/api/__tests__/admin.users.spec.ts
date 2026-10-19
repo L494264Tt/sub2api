@@ -12,12 +12,15 @@ vi.mock('@/api/client', () => ({
 
 import {
   batchAdjustPlatformQuotaUsage,
+  batchRecharge,
   batchUpdateLimits,
   bindUserAuthIdentity,
   type AdminBindAuthIdentityRequest,
   type AdminBoundAuthIdentity,
   type BatchAdjustPlatformQuotaUsageRequest,
   type BatchAdjustPlatformQuotaUsageResponse,
+  type BatchRechargeUsersRequest,
+  type BatchRechargeUsersResponse,
   type BatchUpdateUserLimitsRequest,
   type BatchUpdateUserLimitsResponse,
 } from '@/api/admin/users'
@@ -201,5 +204,21 @@ describe('admin users api auth identity binding', () => {
     expect(result).toEqual(response)
     expect(batchPlatformUsageRequestContractExact).toBe(true)
     expect(batchPlatformUsageResponseContractExact).toBe(true)
+  })
+
+  it('posts batch balance recharge with the selected users and amount', async () => {
+    const request: BatchRechargeUsersRequest = {
+      user_ids: [4, 7],
+      all: false,
+      amount: 12.5,
+      notes: ''
+    }
+    const response: BatchRechargeUsersResponse = { affected: 2 }
+    post.mockResolvedValue({ data: response })
+
+    const result = await batchRecharge(request)
+
+    expect(post).toHaveBeenCalledWith('/admin/users/batch-recharge', request)
+    expect(result).toEqual(response)
   })
 })

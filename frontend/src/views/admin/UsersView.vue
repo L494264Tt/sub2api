@@ -667,6 +667,7 @@
         :page="pagination.page"
         :total="pagination.total"
         :page-size="pagination.page_size"
+        :page-size-options="[10, 20, 50, 100]"
         @update:page="handlePageChange"
         @update:pageSize="handlePageSizeChange"
       />

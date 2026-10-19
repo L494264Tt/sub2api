@@ -60,6 +60,17 @@ export interface BatchUpdateUserLimitsResponse {
   affected: number
 }
 
+export interface BatchRechargeUsersRequest {
+  user_ids: number[]
+  all?: boolean
+  amount: number
+  notes?: string
+}
+
+export interface BatchRechargeUsersResponse {
+  affected: number
+}
+
 export interface BatchAdjustPlatformQuotaUsageRequest {
   user_ids: number[]
   all?: boolean
@@ -221,6 +232,17 @@ export async function batchUpdateLimits(
 ): Promise<BatchUpdateUserLimitsResponse> {
   const { data } = await apiClient.post<BatchUpdateUserLimitsResponse>(
     '/admin/users/batch-limits',
+    request
+  )
+  return data
+}
+
+/** Add the same balance amount to multiple users. */
+export async function batchRecharge(
+  request: BatchRechargeUsersRequest
+): Promise<BatchRechargeUsersResponse> {
+  const { data } = await apiClient.post<BatchRechargeUsersResponse>(
+    '/admin/users/batch-recharge',
     request
   )
   return data
@@ -443,6 +465,7 @@ export const usersAPI = {
   updateBalance,
   updateConcurrency,
   batchUpdateLimits,
+  batchRecharge,
   batchAdjustPlatformQuotaUsage,
   toggleStatus,
   getUserApiKeys,

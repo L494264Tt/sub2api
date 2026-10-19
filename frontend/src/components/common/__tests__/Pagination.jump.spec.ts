@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import Pagination from '../Pagination.vue'
+import Select from '../Select.vue'
 
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 enableAutoUnmount(afterEach)
@@ -13,6 +14,25 @@ function mountPagination() {
 }
 
 describe('pagination jump input', () => {
+  it('passes page size options through to the selector', () => {
+    const wrapper = mount(Pagination, {
+      props: {
+        total: 200,
+        page: 1,
+        pageSize: 20,
+        pageSizeOptions: [10, 50, 100],
+        showPageSizeSelector: true
+      },
+      global: { stubs: { Icon: true } }
+    })
+
+    expect(wrapper.getComponent(Select).props('options')).toEqual(expect.arrayContaining([
+      { value: 10, label: '10' },
+      { value: 50, label: '50' },
+      { value: 100, label: '100' },
+    ]))
+  })
+
   it.each(['click', 'enter'])('jumps to the entered numeric page using %s', async (action) => {
     const wrapper = mountPagination()
     const input = wrapper.get('input[type="number"]')

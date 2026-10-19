@@ -433,6 +433,63 @@ func (h *UserHandler) UpdateBalance(c *gin.Context) {
 	})
 }
 
+// BatchRecharge adds the same balance amount to multiple users.
+// POST /api/v1/admin/users/batch-recharge
+type BatchRechargeRequest struct {
+	UserIDs []int64 `json:"user_ids"`
+	All     bool    `json:"all"`
+	Amount  float64 `json:"amount" binding:"required,gt=0"`
+	Notes   string  `json:"notes"`
+}
+
+func (h *UserHandler) BatchRecharge(c *gin.Context) {
+	var req BatchRechargeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if !req.All && len(req.UserIDs) == 0 {
+		response.BadRequest(c, "user_ids is required unless all=true")
+		return
+	}
+	if !req.All && len(req.UserIDs) > 500 {
+		response.BadRequest(c, "user_ids cannot exceed 500")
+		return
+	}
+
+	userIDs := req.UserIDs
+	if req.All {
+		userIDs = nil
+		page := 1
+		const pageSize = 500
+		for {
+			users, _, err := h.adminService.ListUsers(c.Request.Context(), page, pageSize, service.UserListFilters{}, "id", "asc")
+			if err != nil {
+				response.ErrorFrom(c, err)
+				return
+			}
+			for _, user := range users {
+				userIDs = append(userIDs, user.ID)
+			}
+			if len(users) < pageSize {
+				break
+			}
+			page++
+		}
+	}
+
+	executeAdminIdempotentJSON(c, "admin.users.balance.batch_recharge", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
+		affected := 0
+		for _, userID := range userIDs {
+			if _, err := h.adminService.UpdateUserBalance(ctx, userID, req.Amount, "add", req.Notes); err != nil {
+				return nil, err
+			}
+			affected++
+		}
+		return gin.H{"affected": affected}, nil
+	})
+}
+
 // GetUserAPIKeys handles getting user's API keys
 // GET /api/v1/admin/users/:id/api-keys
 func (h *UserHandler) GetUserAPIKeys(c *gin.Context) {

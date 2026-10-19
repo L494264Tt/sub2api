@@ -80,13 +80,17 @@
               <input
                 id="bulk-token-limit-1d"
                 v-model="tokenLimit1dValue"
-                type="number"
+                type="text"
+                inputmode="numeric"
                 min="0"
                 step="1"
                 class="input"
                 :placeholder="t('admin.users.bulkLimits.leaveUnchanged')"
                 data-test="token-limit-1d-input"
               />
+              <p v-if="formatTokenLimit(tokenLimit1dValue)" class="input-hint" data-test="token-limit-1d-readable">
+                {{ formatTokenLimit(tokenLimit1dValue) }}
+              </p>
             </div>
             <div>
               <label for="bulk-token-limit-7d" class="input-label">
@@ -95,13 +99,17 @@
               <input
                 id="bulk-token-limit-7d"
                 v-model="tokenLimit7dValue"
-                type="number"
+                type="text"
+                inputmode="numeric"
                 min="0"
                 step="1"
                 class="input"
                 :placeholder="t('admin.users.bulkLimits.leaveUnchanged')"
                 data-test="token-limit-7d-input"
               />
+              <p v-if="formatTokenLimit(tokenLimit7dValue)" class="input-hint">
+                {{ formatTokenLimit(tokenLimit7dValue) }}
+              </p>
             </div>
             <div>
               <label for="bulk-token-limit-30d" class="input-label">
@@ -110,13 +118,17 @@
               <input
                 id="bulk-token-limit-30d"
                 v-model="tokenLimit30dValue"
-                type="number"
+                type="text"
+                inputmode="numeric"
                 min="0"
                 step="1"
                 class="input"
                 :placeholder="t('admin.users.bulkLimits.leaveUnchanged')"
                 data-test="token-limit-30d-input"
               />
+              <p v-if="formatTokenLimit(tokenLimit30dValue)" class="input-hint">
+                {{ formatTokenLimit(tokenLimit30dValue) }}
+              </p>
             </div>
           </div>
           <p v-if="enableTokenLimits" class="input-hint">
@@ -142,6 +154,41 @@
                 ? t('admin.users.bulkLimits.resettingTokenQuota')
                 : t('admin.users.bulkLimits.resetTokenQuota') }}
             </button>
+          </div>
+        </div>
+
+        <div class="space-y-3 py-4">
+          <div class="flex items-center justify-between gap-4">
+            <label for="bulk-balance-recharge" class="input-label mb-0">
+              {{ t('admin.users.bulkLimits.balanceRecharge') }}
+            </label>
+            <Toggle
+              v-model="enableBalanceRecharge"
+              :aria-label="t('admin.users.bulkLimits.enableBalanceRecharge')"
+              data-test="enable-balance-recharge"
+            />
+          </div>
+          <div v-if="enableBalanceRecharge" class="space-y-3">
+            <input
+              id="bulk-balance-recharge"
+              v-model="balanceRechargeValue"
+              type="number"
+              min="0.01"
+              step="0.01"
+              class="input"
+              :placeholder="t('admin.users.bulkLimits.balanceRechargePlaceholder')"
+              data-test="balance-recharge-input"
+            />
+            <input
+              v-model="balanceRechargeNotes"
+              type="text"
+              class="input"
+              :placeholder="t('admin.users.bulkLimits.balanceRechargeNotesPlaceholder')"
+              data-test="balance-recharge-notes"
+            />
+            <p v-if="parsedBalanceRecharge !== undefined && parsedBalanceRecharge !== null" class="input-hint" data-test="balance-recharge-total">
+              {{ t('admin.users.bulkLimits.balanceRechargeTotal', { value: formatCurrency(parsedBalanceRecharge * selectedIds.length) }) }}
+            </p>
           </div>
         </div>
 
@@ -266,6 +313,7 @@ const enableConcurrency = ref(false)
 const enableRPMLimit = ref(false)
 const enableTokenLimits = ref(false)
 const enablePlatformUsage = ref(false)
+const enableBalanceRecharge = ref(false)
 const concurrencyValue = ref<string | number>('')
 const rpmLimitValue = ref<string | number>('')
 const tokenLimit1dValue = ref<string | number>('')
@@ -273,6 +321,8 @@ const tokenLimit7dValue = ref<string | number>('')
 const tokenLimit30dValue = ref<string | number>('')
 const dailyUsageValue = ref<string | number>('')
 const weeklyUsageValue = ref<string | number>('')
+const balanceRechargeValue = ref<string | number>('')
+const balanceRechargeNotes = ref('')
 const platformUsagePlatform = ref<PlatformQuotaPlatform>('openai')
 const submitting = ref(false)
 const resettingTokenQuota = ref(false)
@@ -280,7 +330,7 @@ const MAX_BATCH_USER_IDS = 500
 const PLATFORM_OPTIONS: PlatformQuotaPlatform[] = ['anthropic', 'openai', 'gemini', 'antigravity', 'grok']
 
 const parseLimit = (value: string | number): number | null | undefined => {
-  const trimmed = String(value).trim()
+  const trimmed = String(value).replace(/,/g, '').trim()
   if (!trimmed) return undefined
   const parsed = Number(trimmed)
   if (!Number.isInteger(parsed) || parsed < 0) return null
@@ -292,6 +342,28 @@ const parseUsage = (value: string | number): number | null | undefined => {
   if (!trimmed) return undefined
   const parsed = Number(trimmed)
   if (!Number.isFinite(parsed) || parsed < 0) return null
+  return parsed
+}
+
+const formatCurrency = (value: number) => value.toFixed(2)
+
+const formatTokenLimit = (value: string | number) => {
+  const parsed = parseLimit(value)
+  if (parsed === undefined || parsed === null) return ''
+  const formatted = new Intl.NumberFormat('en-US').format(parsed)
+  const compact = parsed >= 100_000_000
+    ? `${Number((parsed / 100_000_000).toFixed(2))} 亿`
+    : parsed >= 10_000
+      ? `${Number((parsed / 10_000).toFixed(2))} 万`
+      : String(parsed)
+  return `${formatted} · ${compact} Token`
+}
+
+const parseBalanceRecharge = (value: string | number): number | null | undefined => {
+  const trimmed = String(value).trim()
+  if (!trimmed) return undefined
+  const parsed = Number(trimmed)
+  if (!Number.isFinite(parsed) || parsed <= 0) return null
   return parsed
 }
 
@@ -316,6 +388,9 @@ const parsedDailyUsage = computed(() =>
 const parsedWeeklyUsage = computed(() =>
   enablePlatformUsage.value ? parseUsage(weeklyUsageValue.value) : undefined
 )
+const parsedBalanceRecharge = computed(() =>
+  enableBalanceRecharge.value ? parseBalanceRecharge(balanceRechargeValue.value) : undefined
+)
 const hasInvalidValue = computed(() =>
   parsedConcurrency.value === null
   || parsedRPMLimit.value === null
@@ -324,6 +399,7 @@ const hasInvalidValue = computed(() =>
   || parsedTokenLimit30d.value === null
   || parsedDailyUsage.value === null
   || parsedWeeklyUsage.value === null
+  || parsedBalanceRecharge.value === null
 )
 const hasUpdate = computed(() =>
   (parsedConcurrency.value !== undefined && parsedConcurrency.value !== null)
@@ -333,6 +409,7 @@ const hasUpdate = computed(() =>
   || (parsedTokenLimit30d.value !== undefined && parsedTokenLimit30d.value !== null)
   || (parsedDailyUsage.value !== undefined && parsedDailyUsage.value !== null)
   || (parsedWeeklyUsage.value !== undefined && parsedWeeklyUsage.value !== null)
+  || (parsedBalanceRecharge.value !== undefined && parsedBalanceRecharge.value !== null)
 )
 const selectionTooLarge = computed(() => props.selectedIds.length > MAX_BATCH_USER_IDS)
 const canSubmit = computed(() =>
@@ -355,6 +432,7 @@ const reset = () => {
   enableRPMLimit.value = false
   enableTokenLimits.value = false
   enablePlatformUsage.value = false
+  enableBalanceRecharge.value = false
   concurrencyValue.value = ''
   rpmLimitValue.value = ''
   tokenLimit1dValue.value = ''
@@ -362,6 +440,8 @@ const reset = () => {
   tokenLimit30dValue.value = ''
   dailyUsageValue.value = ''
   weeklyUsageValue.value = ''
+  balanceRechargeValue.value = ''
+  balanceRechargeNotes.value = ''
   platformUsagePlatform.value = 'openai'
   submitting.value = false
   resettingTokenQuota.value = false
@@ -413,6 +493,12 @@ const handleSubmit = async () => {
     all: false,
     platform: platformUsagePlatform.value
   }
+  const balanceRequest = {
+    user_ids: [...props.selectedIds],
+    all: false,
+    amount: parsedBalanceRecharge.value ?? 0,
+    notes: balanceRechargeNotes.value.trim()
+  }
   if (parsedDailyUsage.value !== undefined && parsedDailyUsage.value !== null) {
     usageRequest.daily_usage_usd = parsedDailyUsage.value
     fields.push(t('admin.users.bulkLimits.dailyUsageValue', {
@@ -425,6 +511,12 @@ const handleSubmit = async () => {
     fields.push(t('admin.users.bulkLimits.weeklyUsageValue', {
       platform: platformUsagePlatform.value,
       value: parsedWeeklyUsage.value
+    }))
+  }
+  if (parsedBalanceRecharge.value !== undefined && parsedBalanceRecharge.value !== null) {
+    fields.push(t('admin.users.bulkLimits.balanceRechargeValue', {
+      value: formatCurrency(parsedBalanceRecharge.value),
+      total: formatCurrency(parsedBalanceRecharge.value * props.selectedIds.length)
     }))
   }
 
@@ -451,6 +543,10 @@ const handleSubmit = async () => {
     }
     if (usageRequest.daily_usage_usd !== undefined || usageRequest.weekly_usage_usd !== undefined) {
       const result = await adminAPI.users.batchAdjustPlatformQuotaUsage(usageRequest)
+      affected = Math.max(affected, result.affected)
+    }
+    if (parsedBalanceRecharge.value !== undefined && parsedBalanceRecharge.value !== null) {
+      const result = await adminAPI.users.batchRecharge(balanceRequest)
       affected = Math.max(affected, result.affected)
     }
     appStore.showSuccess(

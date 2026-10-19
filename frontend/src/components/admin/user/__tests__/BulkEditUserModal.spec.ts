@@ -3,9 +3,10 @@ import { flushPromises, mount } from '@vue/test-utils'
 
 import BulkEditUserModal from '../BulkEditUserModal.vue'
 
-const { batchUpdateLimits, batchAdjustPlatformQuotaUsage, showSuccess, showError } = vi.hoisted(() => ({
+const { batchUpdateLimits, batchAdjustPlatformQuotaUsage, batchRecharge, showSuccess, showError } = vi.hoisted(() => ({
   batchUpdateLimits: vi.fn(),
   batchAdjustPlatformQuotaUsage: vi.fn(),
+  batchRecharge: vi.fn(),
   showSuccess: vi.fn(),
   showError: vi.fn()
 }))
@@ -14,7 +15,8 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     users: {
       batchUpdateLimits,
-      batchAdjustPlatformQuotaUsage
+      batchAdjustPlatformQuotaUsage,
+      batchRecharge
     }
   }
 }))
@@ -53,10 +55,12 @@ describe('BulkEditUserModal', () => {
   beforeEach(() => {
     batchUpdateLimits.mockReset()
     batchAdjustPlatformQuotaUsage.mockReset()
+    batchRecharge.mockReset()
     showSuccess.mockReset()
     showError.mockReset()
     batchUpdateLimits.mockResolvedValue({ affected: 2 })
     batchAdjustPlatformQuotaUsage.mockResolvedValue({ affected: 2, platform: 'openai' })
+    batchRecharge.mockResolvedValue({ affected: 2 })
   })
 
   afterEach(() => {
@@ -163,6 +167,39 @@ describe('BulkEditUserModal', () => {
     })
     expect(confirm).toHaveBeenCalledWith(
       expect.stringContaining('admin.users.bulkLimits.tokenLimit7dValue')
+    )
+    expect(wrapper.emitted('success')).toEqual([[2]])
+  })
+
+  it('shows a readable formatted value for large GPT token limits', async () => {
+    const wrapper = mountModal()
+
+    await wrapper.get('[data-test="enable-token-limits"]').trigger('click')
+    await wrapper.get('[data-test="token-limit-1d-input"]').setValue('100000000')
+
+    expect(wrapper.get('[data-test="token-limit-1d-readable"]').text()).toContain('100,000,000')
+    expect(wrapper.get('[data-test="token-limit-1d-readable"]').text()).toContain('1 亿')
+  })
+
+  it('submits a batch balance recharge with the estimated total', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const wrapper = mountModal()
+
+    await wrapper.get('[data-test="enable-balance-recharge"]').trigger('click')
+    await wrapper.get('[data-test="balance-recharge-input"]').setValue('12.5')
+
+    expect(wrapper.get('[data-test="balance-recharge-total"]').text()).toContain('25')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(batchRecharge).toHaveBeenCalledWith({
+      user_ids: [4, 7],
+      all: false,
+      amount: 12.5,
+      notes: ''
+    })
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining('admin.users.bulkLimits.balanceRechargeValue')
     )
     expect(wrapper.emitted('success')).toEqual([[2]])
   })
