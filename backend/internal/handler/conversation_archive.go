@@ -3,16 +3,24 @@ package handler
 import (
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/securityaudit"
+	"github.com/Wei-Shaw/sub2api/internal/usagearchive"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // ConversationArchiveMiddleware captures successful model output only when an
 // administrator has explicitly enabled conversation recording for the API key's group.
-func ConversationArchiveMiddleware(recorder securityaudit.ConversationRecorder) gin.HandlerFunc {
+func ConversationArchiveMiddleware(recorder securityaudit.ConversationRecorder, usageRecorders ...*usagearchive.Recorder) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if recorder == nil || !isConversationRequestPath(c.Request) {
+		var usageRecorder *usagearchive.Recorder
+		if len(usageRecorders) > 0 {
+			usageRecorder = usageRecorders[0]
+		}
+		if recorder == nil && usageRecorder == nil {
 			c.Next()
 			return
 		}
@@ -21,8 +29,13 @@ func ConversationArchiveMiddleware(recorder securityaudit.ConversationRecorder) 
 		if apiKey != nil {
 			groupID = apiKey.GroupID
 		}
-		settings := recorder.ConversationCaptureSettings(groupID)
-		if !settings.Enabled {
+		settings := securityaudit.ConversationCaptureSettings{}
+		if recorder != nil {
+			settings = recorder.ConversationCaptureSettings(groupID)
+		}
+		capturePromptAudit := recorder != nil && settings.Enabled && isConversationRequestPath(c.Request)
+		captureUsage := usageRecorder != nil && c.Request != nil && c.Request.Method == http.MethodPost
+		if !capturePromptAudit && !captureUsage {
 			c.Next()
 			return
 		}
@@ -30,7 +43,11 @@ func ConversationArchiveMiddleware(recorder securityaudit.ConversationRecorder) 
 		originalWriter := c.Writer
 		writer := acquireOpsCaptureWriter(originalWriter)
 		writer.setContext(c)
-		writer.enableConversationCapture(settings.ResponseMaxBytes)
+		responseMaxBytes := settings.ResponseMaxBytes
+		if captureUsage && responseMaxBytes < 4<<20 {
+			responseMaxBytes = 4 << 20
+		}
+		writer.enableConversationCapture(responseMaxBytes)
 		defer func() {
 			if c.Writer == writer {
 				c.Writer = originalWriter
@@ -42,11 +59,62 @@ func ConversationArchiveMiddleware(recorder securityaudit.ConversationRecorder) 
 
 		value, exists := c.Get(conversationAuditRequestContextKey)
 		request, ok := value.(securityaudit.Request)
-		if !exists || !ok || strings.TrimSpace(request.Stage) != "http" || !isConversationProtocol(request.Protocol) {
+		if !exists || !ok {
+			if !captureUsage {
+				return
+			}
+			request = buildUsageArchiveFallbackRequest(c)
+		}
+		if strings.TrimSpace(request.Stage) != "" && strings.TrimSpace(request.Stage) != "http" {
 			return
 		}
-		recorder.EnqueueConversationTurn(request, c.Writer.Status(), c.Writer.Header().Get("Content-Type"), writer.capturedConversationBytes(), writer.conversationCaptureTruncated())
+		responseBody := writer.capturedConversationBytes()
+		responseTruncated := writer.conversationCaptureTruncated()
+		if capturePromptAudit && isConversationProtocol(request.Protocol) {
+			recorder.EnqueueConversationTurn(request, c.Writer.Status(), c.Writer.Header().Get("Content-Type"), responseBody, responseTruncated)
+		}
+		if captureUsage {
+			usageRecorder.Enqueue(usagearchive.CaptureInput{
+				RequestID: request.RequestID, UsageLogRequestID: request.RequestID, UserID: request.UserID,
+				APIKeyID: request.APIKeyID, GroupID: request.GroupID, Provider: request.Provider,
+				Endpoint: request.Endpoint, Protocol: request.Protocol, Model: request.Model,
+				ConversationID: request.ConversationID, RequestBody: request.Body, ResponseBody: responseBody,
+				ResponseContentType: c.Writer.Header().Get("Content-Type"), StatusCode: c.Writer.Status(),
+				CapturedAt: time.Now().UTC(), ResponseTruncated: responseTruncated,
+			})
+		}
 	}
+}
+
+func buildUsageArchiveFallbackRequest(c *gin.Context) securityaudit.Request {
+	requestID, _ := c.Request.Context().Value(ctxkey.ClientRequestID).(string)
+	if strings.TrimSpace(requestID) == "" {
+		requestID = strings.TrimSpace(c.GetHeader("X-Request-ID"))
+	}
+	if strings.TrimSpace(requestID) == "" {
+		requestID = uuid.NewString()
+	}
+	request := securityaudit.Request{
+		RequestID: requestID,
+		Endpoint:  c.Request.URL.Path,
+		Protocol:  "unknown",
+		Stage:     "http",
+	}
+	if apiKey := getOpsAPIKey(c); apiKey != nil {
+		request.APIKeyID = apiKey.ID
+		request.APIKeyName = apiKey.Name
+		request.UserID = apiKey.UserID
+		request.GroupID = apiKey.GroupID
+		if apiKey.Group != nil {
+			request.GroupName = apiKey.Group.Name
+			request.Provider = apiKey.Group.Platform
+		}
+		if apiKey.User != nil {
+			request.Username = apiKey.User.Username
+			request.UserEmail = apiKey.User.Email
+		}
+	}
+	return request
 }
 
 func isConversationRequestPath(request *http.Request) bool {

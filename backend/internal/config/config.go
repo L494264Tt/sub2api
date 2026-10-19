@@ -105,10 +105,21 @@ type Config struct {
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
 	BatchImage              BatchImageConfig              `mapstructure:"batch_image"`
 	ImageStorage            ImageStorageConfig            `mapstructure:"image_storage"`
+	UsageArchive            UsageArchiveConfig            `mapstructure:"usage_archive"`
 	Plugins                 PluginConfig                  `mapstructure:"plugins"`
 
 	// Enforce only API-key spending windows in simple mode.
 	SimpleModeKeyRateLimitEnabled bool `mapstructure:"simple_mode_key_rate_limit_enabled" yaml:"simple_mode_key_rate_limit_enabled"`
+}
+
+type UsageArchiveConfig struct {
+	Enabled                 bool  `mapstructure:"enabled"`
+	RawContentRetentionDays int   `mapstructure:"raw_content_retention_days"`
+	MetadataRetentionDays   int   `mapstructure:"metadata_retention_days"`
+	DailyContentBudgetBytes int64 `mapstructure:"daily_content_budget_bytes"`
+	QueueCapacity           int   `mapstructure:"queue_capacity"`
+	WorkerCount             int   `mapstructure:"worker_count"`
+	CleanupBatchSize        int   `mapstructure:"cleanup_batch_size"`
 }
 
 // SimpleModeConfig controls startup behavior in simple mode.
@@ -2407,6 +2418,16 @@ func setDefaults() {
 	viper.SetDefault("usage_cleanup.batch_size", 5000)
 	viper.SetDefault("usage_cleanup.worker_interval_seconds", 10)
 	viper.SetDefault("usage_cleanup.task_timeout_seconds", 1800)
+
+	// Full usage content archive. Metadata remains in usage_logs; large content
+	// is stored in sidecar tables with bounded retention.
+	viper.SetDefault("usage_archive.enabled", true)
+	viper.SetDefault("usage_archive.raw_content_retention_days", 7)
+	viper.SetDefault("usage_archive.metadata_retention_days", 90)
+	viper.SetDefault("usage_archive.daily_content_budget_bytes", int64(2<<30))
+	viper.SetDefault("usage_archive.queue_capacity", 2048)
+	viper.SetDefault("usage_archive.worker_count", 2)
+	viper.SetDefault("usage_archive.cleanup_batch_size", 100)
 
 	// Idempotency
 	viper.SetDefault("idempotency.observe_only", true)

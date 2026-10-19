@@ -124,12 +124,23 @@ func RegisterAdminRoutes(
 
 		// 独立提示词输入审计
 		registerPromptAuditRoutes(admin, h)
+		registerUsageArchiveRoutes(admin, h)
 
 		// 邀请返利（专属用户管理）
 		registerAffiliateRoutes(admin, h)
 
 		// 操作审计日志
 		registerAuditLogRoutes(admin, h, stepUpAuth)
+	}
+}
+
+func registerUsageArchiveRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	archive := admin.Group("/usage-archive")
+	{
+		archive.GET("/sessions", h.Admin.UsageArchive.ListSessions)
+		archive.GET("/sessions/:id", h.Admin.UsageArchive.GetSession)
+		archive.GET("/stats", h.Admin.UsageArchive.Stats)
+		archive.DELETE("/sessions/:id/content", h.Admin.UsageArchive.DeleteSessionContent)
 	}
 }
 

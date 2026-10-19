@@ -13,6 +13,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/securityaudit"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/usagearchive"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
@@ -39,7 +40,11 @@ func RegisterGatewayRoutes(
 	if h != nil && h.Admin != nil && h.Admin.PromptAudit != nil {
 		conversationRecorder = h.Admin.PromptAudit.ConversationRecorder()
 	}
-	conversationArchive := handler.ConversationArchiveMiddleware(conversationRecorder)
+	var usageArchiveRecorder *usagearchive.Recorder
+	if h != nil {
+		usageArchiveRecorder = h.UsageArchive
+	}
+	conversationArchive := handler.ConversationArchiveMiddleware(conversationRecorder, usageArchiveRecorder)
 	endpointNorm := handler.InboundEndpointMiddleware()
 	compositeTarget := compositeTargetPlatformMiddleware(compositeResolver)
 	compositeGeminiTarget := compositeGeminiTargetPlatformMiddleware(compositeResolver)

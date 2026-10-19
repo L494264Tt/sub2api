@@ -1,13 +1,29 @@
 package handler
 
 import (
+	"database/sql"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
 	"github.com/Wei-Shaw/sub2api/internal/securityaudit"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/usagearchive"
 
 	"github.com/google/wire"
 )
+
+func ProvideUsageArchiveRecorder(db *sql.DB, cfg *config.Config) *usagearchive.Recorder {
+	policy := usagearchive.DefaultRetentionPolicy()
+	if cfg != nil {
+		policy.Enabled = cfg.UsageArchive.Enabled
+		policy.RawContentRetentionDays = cfg.UsageArchive.RawContentRetentionDays
+		policy.MetadataRetentionDays = cfg.UsageArchive.MetadataRetentionDays
+		policy.DailyContentBudgetBytes = cfg.UsageArchive.DailyContentBudgetBytes
+		policy.QueueCapacity = cfg.UsageArchive.QueueCapacity
+		policy.WorkerCount = cfg.UsageArchive.WorkerCount
+		policy.CleanupBatchSize = cfg.UsageArchive.CleanupBatchSize
+	}
+	return usagearchive.NewRecorder(usagearchive.NewPostgresRepository(db), policy)
+}
 
 // ProvideAdminHandlers creates the AdminHandlers struct
 func ProvideAdminHandlers(
@@ -47,6 +63,7 @@ func ProvideAdminHandlers(
 	affiliateHandler *admin.AffiliateHandler,
 	complianceHandler *admin.ComplianceHandler,
 	auditLogHandler *admin.AuditLogHandler,
+	usageArchiveHandler *admin.UsageArchiveHandler,
 	upstreamBillingProbe *service.UpstreamBillingProbeService,
 	ollamaCloudUsage *service.OllamaCloudUsageService,
 	opencodeGoUsage *service.OpenCodeGoUsageService,
@@ -93,6 +110,7 @@ func ProvideAdminHandlers(
 		Affiliate:              affiliateHandler,
 		Compliance:             complianceHandler,
 		AuditLog:               auditLogHandler,
+		UsageArchive:           usageArchiveHandler,
 	}
 }
 
@@ -202,6 +220,7 @@ func ProvideHandlers(
 	modelPlazaHandler *ModelPlazaHandler,
 	asyncImageHandler *AsyncImageHandler,
 	batchImageHandler *BatchImageHandler,
+	usageArchiveRecorder *usagearchive.Recorder,
 	_ *service.IdempotencyCoordinator,
 	_ *service.IdempotencyCleanupService,
 	_ *service.OpenAIQuotaAutoResetService,
@@ -228,6 +247,7 @@ func ProvideHandlers(
 		ModelPlaza:       modelPlazaHandler,
 		AsyncImage:       asyncImageHandler,
 		BatchImage:       batchImageHandler,
+		UsageArchive:     usageArchiveRecorder,
 	}
 }
 
@@ -291,6 +311,9 @@ var ProviderSet = wire.NewSet(
 	admin.NewAffiliateHandler,
 	admin.NewComplianceHandler,
 	admin.NewAuditLogHandler,
+	admin.NewUsageArchiveHandler,
+	usagearchive.NewPostgresRepository,
+	ProvideUsageArchiveRecorder,
 
 	// AdminHandlers and Handlers constructors
 	ProvideAdminHandlers,
