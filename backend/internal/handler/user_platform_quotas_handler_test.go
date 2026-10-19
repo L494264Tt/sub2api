@@ -142,9 +142,9 @@ func TestLazyZeroQuotaForResponse_AdminViewIncludesWindowStart(t *testing.T) {
 }
 
 func TestLazyZeroQuotaForResponse_ActiveWindowPreservesUsage(t *testing.T) {
-	// 今天的窗口起始时间（不过期）：按全局时区取当天 0 点，与 view 层同口径
-	now := time.Now()
-	today := timezone.StartOfDay(now)
+	// 活跃配额窗口按全局时区的 07:00 起算，与 view 层同口径。
+	now := time.Date(2026, time.September, 9, 12, 0, 0, 0, timezone.Location())
+	today := timezone.StartOfQuotaDay(now)
 	usage := 2.5
 	r := service.UserPlatformQuotaRecord{
 		Platform:         "openai",

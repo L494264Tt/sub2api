@@ -768,8 +768,7 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 			return s.checkSimpleModeAPIKeyRateLimits(ctx, apiKey)
 		}
 
-	// 绠€鏄撴ā寮忥細璺宠繃鎵€鏈夎璐规鏌?
-	// 简易模式：跳过所有计费检查
+		// 简易模式：跳过所有计费检查
 		return nil
 	}
 	if s.circuitBreaker != nil && !s.circuitBreaker.Allow() {
